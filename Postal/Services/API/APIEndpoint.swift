@@ -5,9 +5,10 @@ enum APIEndpoint {
     case firebaseConfig
     case postOffices(search: String?, limit: Int?)
     case meMailboxes
+    case claimMailbox
     case postOfficeMailboxes(postOfficeID: Int)
     case createShipment
-    case listShipments(status: String?, limit: Int?)
+    case listShipments(status: ShipmentStatus?, limit: Int?)
     case shipmentDetail(id: String)
     case shipmentEvents(id: String)
     case shipmentLetter(id: String)
@@ -23,7 +24,7 @@ enum APIEndpoint {
             return "/api/firebase-config"
         case .postOffices:
             return "/api/post-offices"
-        case .meMailboxes:
+        case .meMailboxes, .claimMailbox:
             return "/api/me/mailboxes"
         case let .postOfficeMailboxes(postOfficeID):
             return "/api/post-offices/\(postOfficeID)/mailboxes"
@@ -48,7 +49,7 @@ enum APIEndpoint {
 
     var method: String {
         switch self {
-        case .createShipment:
+        case .createShipment, .claimMailbox:
             return "POST"
         case .shipmentLetter:
             return "GET"
@@ -79,7 +80,7 @@ enum APIEndpoint {
             ])
         case let .listShipments(status, limit):
             components.queryItems = queryItems([
-                ("status", status),
+                ("status", status?.rawValue),
                 ("limit", limit.map(String.init)),
             ])
         default:

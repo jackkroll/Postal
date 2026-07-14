@@ -22,12 +22,15 @@ struct ShipLetterView: View {
                         Label("No Mailboxes", systemImage: "tray")
                     } description: {
                         Text("Claim a mailbox before sending letters.")
+                    } actions: {
+                        NavigationLink("Claim a Mailbox", value: ViewRoute.claimBox)
+                            .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    Picker("Send from", selection: $viewmodel.selectedOriginMailboxID) {
-                        Text("Select a mailbox").tag(Optional<String>.none)
+                    Picker("Send from", selection: $viewmodel.selectedOriginMailbox) {
+                        Text("Select a mailbox").tag(Optional<MailboxSummary>.none)
                         ForEach(viewmodel.ownedMailboxes) { mailbox in
-                            Text(mailbox.pickerLabel).tag(Optional(mailbox.id))
+                            Text(mailbox.pickerLabel).tag(Optional(mailbox))
                         }
                     }
                 }
@@ -104,8 +107,8 @@ struct ShipLetterView: View {
                 .disabled(!viewmodel.canSend)
             }
         }
-        .task {
-            await viewmodel.loadMailboxes()
+        .onAppear {
+            Task { await viewmodel.loadMailboxes() }
         }
         .sheet(isPresented: $viewmodel.isDestinationPickerPresented) {
             DestinationMailboxPickerSheet(api: viewmodel.api) { mailbox in
@@ -139,7 +142,7 @@ extension ShipLetterView {
 
         let api: APIClient
         var ownedMailboxes: [MailboxSummary] = []
-        var selectedOriginMailboxID: String?
+        var selectedOriginMailbox: MailboxSummary?
         var selectedDestinationMailbox: MailboxSummary?
         var isDestinationPickerPresented = false
 
@@ -160,7 +163,7 @@ extension ShipLetterView {
 
         var canSend: Bool {
             !isSending
-                && selectedOriginMailboxID != nil
+                && selectedOriginMailbox != nil
                 && selectedDestinationMailbox != nil
                 && !trimmed(letterText).isEmpty
                 && !isOverByteLimit
@@ -182,8 +185,8 @@ extension ShipLetterView {
             do {
                 let mailboxes = try await api.listOwnedMailboxes()
                 ownedMailboxes = mailboxes.filter(\.owned)
-                if selectedOriginMailboxID == nil, ownedMailboxes.count == 1 {
-                    selectedOriginMailboxID = ownedMailboxes[0].id
+                if selectedOriginMailbox == nil, ownedMailboxes.count == 1 {
+                    selectedOriginMailbox = ownedMailboxes[0]
                 }
             } catch {
                 errorMessage = error.localizedDescription
@@ -192,8 +195,8 @@ extension ShipLetterView {
 
         func send() async {
             guard canSend,
-                  let originBoxID = selectedOriginMailboxID,
-                  let destinationBoxID = selectedDestinationMailbox?.id
+                  let origin = selectedOriginMailbox,
+                  let destination = selectedDestinationMailbox
             else { return }
 
             isSending = true
@@ -201,8 +204,8 @@ extension ShipLetterView {
             defer { isSending = false }
 
             let request = CreateShipmentRequest(
-                originBoxID: originBoxID,
-                destinationBoxID: destinationBoxID,
+                origin: origin,
+                destination: destination,
                 letter: .plain(trimmed(letterText))
             )
 
@@ -231,7 +234,7 @@ extension ShipLetterView {
     NavigationStack {
         ShipLetterView(viewmodel: .preview(
             ownedMailboxes: PreviewData.ownedMailboxes,
-            selectedOriginMailboxID: PreviewData.ownedMailboxes[0].id,
+            selectedOriginMailbox: PreviewData.ownedMailboxes[0],
             selectedDestinationMailbox: PreviewData.destinationMailboxes[1],
             letterText: PreviewData.sampleLetterText
         ))

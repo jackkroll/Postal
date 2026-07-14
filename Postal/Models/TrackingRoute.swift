@@ -65,40 +65,15 @@ struct TrackingRoute: Codable, Hashable {
     }
     
     func statusColor() -> Color {
-        switch status {
-        case .awaitingPickup:
-            return .teal
-        case .inTransit:
-            return .blue
-        case .atFacility:
-            return .blue
-        case .outForDelivery:
-            return .mint
-        case .delivered:
-            return .green
-        case .failed:
-            return .red
-        }
+        status.tintColor
     }
+
     func statusIcon() -> String {
-        switch status {
-        case .awaitingPickup:
-            return "tray.full.fill"
-        case .inTransit:
-            return "truck.box.fill"
-        case .atFacility:
-            return "building.fill"
-        case .outForDelivery:
-            return "truck.box.badge.clock.fill"
-        case .delivered:
-            return "house.fill"
-        case .failed:
-            return "xmark"
-        }
+        status.iconName
     }
 
     func statusSummary() -> TrackingStatusSummary {
-        let title = status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+        let title = status.displayTitle
         let facilityName = currentFacility?.name ?? latestEvent?.facility?.name
         let latestDate = latestEventDate
         let relativeTime = latestDate.map(formatRelativeTime)

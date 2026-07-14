@@ -3,8 +3,8 @@ import Foundation
 /// Firestore mirror at `users/{uid}/letters/{trackingNumber}`.
 struct LetterSummary: Identifiable, Hashable {
     let trackingNumber: String
-    let sendTo: String
-    let sendFrom: String
+    let origin: LetterEndpoint
+    let destination: LetterEndpoint
     let status: ShipmentStatus
     let hasLetter: Bool
     let letterFormat: LetterFormat?
@@ -25,5 +25,9 @@ struct LetterSummary: Identifiable, Hashable {
             filename: nil,
             byteSize: letterByteSize
         )
+    }
+
+    var sortDate: Date {
+        updatedAt ?? createdAt ?? .distantPast
     }
 }

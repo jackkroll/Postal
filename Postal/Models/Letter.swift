@@ -56,14 +56,20 @@ struct CreateTextLetterPayload: Codable, Hashable {
 }
 
 struct CreateShipmentRequest: Codable {
-    let originBoxID: String
-    let destinationBoxID: String
+    let originBoxID: MailboxID
+    let destinationBoxID: MailboxID
     let letter: CreateTextLetterPayload?
 
     enum CodingKeys: String, CodingKey {
         case originBoxID = "origin_box_id"
         case destinationBoxID = "destination_box_id"
         case letter
+    }
+
+    init(origin: MailboxSummary, destination: MailboxSummary, letter: CreateTextLetterPayload?) {
+        self.originBoxID = origin.id
+        self.destinationBoxID = destination.id
+        self.letter = letter
     }
 }
 
@@ -85,17 +91,23 @@ struct CreateMultipartLetterPayload {
 }
 
 struct CreateMultipartShipmentRequest {
-    let originBoxID: String
-    let destinationBoxID: String
+    let originBoxID: MailboxID
+    let destinationBoxID: MailboxID
     let letter: CreateMultipartLetterPayload?
+
+    init(origin: MailboxSummary, destination: MailboxSummary, letter: CreateMultipartLetterPayload?) {
+        self.originBoxID = origin.id
+        self.destinationBoxID = destination.id
+        self.letter = letter
+    }
 }
 
 struct ShipmentCreateResponse: Codable, Identifiable, Hashable {
     let id: String
     let trackingNumber: String
     let status: ShipmentStatus
-    let originBoxID: String
-    let destinationBoxID: String
+    let originBoxID: MailboxID
+    let destinationBoxID: MailboxID
     let letter: LetterMetadata?
 
     enum CodingKeys: String, CodingKey {

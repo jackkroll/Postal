@@ -1,7 +1,16 @@
 import Foundation
 
+/// Body for `POST /api/me/mailboxes` — claims an available mailbox at a post office.
+struct ClaimMailboxRequest: Codable, Hashable {
+    let postOfficeID: Int
+
+    enum CodingKeys: String, CodingKey {
+        case postOfficeID = "post_office_id"
+    }
+}
+
 struct MailboxSummary: Codable, Identifiable, Hashable {
-    let id: String
+    let id: MailboxID
     let postOfficeID: Int
     let postOfficeName: String?
     let label: String
@@ -15,6 +24,34 @@ struct MailboxSummary: Codable, Identifiable, Hashable {
         case label
         case ownerUserID = "owner_user_id"
         case owned
+    }
+
+    init(
+        id: MailboxID,
+        postOfficeID: Int,
+        postOfficeName: String?,
+        label: String,
+        ownerUserID: String?,
+        owned: Bool
+    ) {
+        self.id = id
+        self.postOfficeID = postOfficeID
+        self.postOfficeName = postOfficeName
+        self.label = label
+        self.ownerUserID = ownerUserID
+        self.owned = owned
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedID = try container.decode(MailboxID.self, forKey: .id)
+        let decodedPostOfficeID = try container.decode(Int.self, forKey: .postOfficeID)
+        id = decodedID
+        postOfficeID = decodedPostOfficeID
+        postOfficeName = try container.decodeIfPresent(String.self, forKey: .postOfficeName)
+        label = try container.decode(String.self, forKey: .label)
+        ownerUserID = try container.decodeIfPresent(String.self, forKey: .ownerUserID)
+        owned = try container.decodeIfPresent(Bool.self, forKey: .owned) ?? false
     }
 
     var locationLabel: String {

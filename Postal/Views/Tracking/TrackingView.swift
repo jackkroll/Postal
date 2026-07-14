@@ -208,16 +208,11 @@ extension TrackingView {
         }
 
         func lookupLocation(code: Int) async throws -> Location {
-            try await api.get(.location(code: code))
+            try await api.fetchLocation(code: code)
         }
         
         func currentStatus() -> String? {
-            if let route = self.trackingRoute {
-                return route.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
-            }
-            else {
-                return nil
-            }
+            trackingRoute?.status.displayTitle
         }
         
     }

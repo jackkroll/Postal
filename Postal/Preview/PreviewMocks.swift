@@ -50,9 +50,18 @@ extension LettersListView.ViewModel {
     static func preview(letters: [LetterSummary] = PreviewData.letters) -> LettersListView.ViewModel {
         let viewModel = LettersListView.ViewModel(
             auth: PreviewAuthService(),
-            lettersService: PreviewLettersService(letters: letters)
+            lettersService: PreviewLettersService(letters: letters),
+            api: APIClient()
         )
         viewModel.letters = letters
+        viewModel.mailboxesByID = Dictionary(
+            uniqueKeysWithValues: PreviewData.allMailboxes.map { ($0.id, $0) }
+        )
+        viewModel.locationsByCode = [
+            PreviewData.mainStreetLocation.code: PreviewData.mainStreetLocation,
+            PreviewData.westsideLocation.code: PreviewData.westsideLocation,
+            PreviewData.riversideLocation.code: PreviewData.riversideLocation,
+        ]
         return viewModel
     }
 }
@@ -103,7 +112,7 @@ extension SignInView.ViewModel {
 extension ShipLetterView.ViewModel {
     static func preview(
         ownedMailboxes: [MailboxSummary] = PreviewData.ownedMailboxes,
-        selectedOriginMailboxID: String? = nil,
+        selectedOriginMailbox: MailboxSummary? = nil,
         selectedDestinationMailbox: MailboxSummary? = nil,
         letterText: String = "",
         errorMessage: String? = nil,
@@ -111,11 +120,31 @@ extension ShipLetterView.ViewModel {
     ) -> ShipLetterView.ViewModel {
         let viewModel = ShipLetterView.ViewModel(api: APIClient())
         viewModel.ownedMailboxes = ownedMailboxes
-        viewModel.selectedOriginMailboxID = selectedOriginMailboxID
+        viewModel.selectedOriginMailbox = selectedOriginMailbox
         viewModel.selectedDestinationMailbox = selectedDestinationMailbox
         viewModel.letterText = letterText
         viewModel.errorMessage = errorMessage
         viewModel.isSending = isSending
+        return viewModel
+    }
+}
+
+extension ClaimMailboxView.ViewModel {
+    static func preview(
+        postOffices: [PostOffice] = PreviewData.postOffices,
+        selectedPostOffice: PostOffice? = nil,
+        searchText: String = "",
+        errorMessage: String? = nil,
+        isClaiming: Bool = false,
+        hasLoadedPostOffices: Bool = true
+    ) -> ClaimMailboxView.ViewModel {
+        let viewModel = ClaimMailboxView.ViewModel(api: APIClient())
+        viewModel.postOffices = postOffices
+        viewModel.selectedPostOffice = selectedPostOffice
+        viewModel.searchText = searchText
+        viewModel.errorMessage = errorMessage
+        viewModel.isClaiming = isClaiming
+        viewModel.hasLoadedPostOffices = hasLoadedPostOffices
         return viewModel
     }
 }

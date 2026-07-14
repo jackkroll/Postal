@@ -25,11 +25,37 @@ enum PreviewData {
 
     static let postOffices = [mainStreetPostOffice, centralSortingFacility, riversideStation, westsideDeliveryOffice]
 
+    // MARK: - Locations
+
+    static let mainStreetLocation = Location(
+        code: mainStreetPostOffice.id,
+        name: mainStreetPostOffice.name,
+        latitude: mainStreetPostOffice.lat ?? 0,
+        longitude: mainStreetPostOffice.lon ?? 0,
+        tier: mainStreetPostOffice.tier ?? 0
+    )
+
+    static let westsideLocation = Location(
+        code: westsideDeliveryOffice.id,
+        name: westsideDeliveryOffice.name,
+        latitude: westsideDeliveryOffice.lat ?? 0,
+        longitude: westsideDeliveryOffice.lon ?? 0,
+        tier: westsideDeliveryOffice.tier ?? 0
+    )
+
+    static let riversideLocation = Location(
+        code: riversideStation.id,
+        name: riversideStation.name,
+        latitude: riversideStation.lat ?? 0,
+        longitude: riversideStation.lon ?? 0,
+        tier: riversideStation.tier ?? 0
+    )
+
     // MARK: - Mailboxes
 
     static let ownedMailboxes: [MailboxSummary] = [
         MailboxSummary(
-            id: "404:7XK9M",
+            id: MailboxID(postOfficeID: mainStreetPostOffice.id, code: "7XK9M"),
             postOfficeID: mainStreetPostOffice.id,
             postOfficeName: mainStreetPostOffice.name,
             label: "Box #12",
@@ -37,7 +63,7 @@ enum PreviewData {
             owned: true
         ),
         MailboxSummary(
-            id: "405:HOME1",
+            id: MailboxID(postOfficeID: westsideDeliveryOffice.id, code: "HOME1"),
             postOfficeID: westsideDeliveryOffice.id,
             postOfficeName: westsideDeliveryOffice.name,
             label: "Box #91",
@@ -48,7 +74,7 @@ enum PreviewData {
 
     static let destinationMailboxes: [MailboxSummary] = [
         MailboxSummary(
-            id: "404:2ABC1",
+            id: MailboxID(postOfficeID: mainStreetPostOffice.id, code: "2ABC1"),
             postOfficeID: mainStreetPostOffice.id,
             postOfficeName: mainStreetPostOffice.name,
             label: "Box #47",
@@ -56,14 +82,42 @@ enum PreviewData {
             owned: false
         ),
         MailboxSummary(
-            id: "404:9ZZZ9",
+            id: MailboxID(postOfficeID: mainStreetPostOffice.id, code: "9ZZZ9"),
             postOfficeID: mainStreetPostOffice.id,
             postOfficeName: mainStreetPostOffice.name,
             label: "Box #3",
             ownerUserID: "other-user-2",
             owned: false
         ),
+        MailboxSummary(
+            id: MailboxID(postOfficeID: riversideStation.id, code: "RIV22"),
+            postOfficeID: riversideStation.id,
+            postOfficeName: riversideStation.name,
+            label: "Box #22",
+            ownerUserID: "other-user-3",
+            owned: false
+        ),
+        MailboxSummary(
+            id: MailboxID(postOfficeID: westsideDeliveryOffice.id, code: "OUT105"),
+            postOfficeID: westsideDeliveryOffice.id,
+            postOfficeName: westsideDeliveryOffice.name,
+            label: "Box #105",
+            ownerUserID: "other-user-4",
+            owned: false
+        ),
+        MailboxSummary(
+            id: MailboxID(postOfficeID: riversideStation.id, code: "FAIL55"),
+            postOfficeID: riversideStation.id,
+            postOfficeName: riversideStation.name,
+            label: "Box #55",
+            ownerUserID: "other-user-5",
+            owned: false
+        ),
     ]
+
+    static var allMailboxes: [MailboxSummary] {
+        ownedMailboxes + destinationMailboxes
+    }
 
     // MARK: - Tracking Numbers
 
@@ -92,8 +146,8 @@ enum PreviewData {
 
     static let letterInTransit = LetterSummary(
         trackingNumber: inTransitTrackingNumber,
-        sendTo: "Box #47",
-        sendFrom: "Box #12",
+        origin: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
+        destination: LetterEndpoint(mailboxID: destinationMailboxes[0].id),
         status: .inTransit,
         hasLetter: true,
         letterFormat: .text,
@@ -106,8 +160,8 @@ enum PreviewData {
 
     static let letterDelivered = LetterSummary(
         trackingNumber: deliveredTrackingNumber,
-        sendTo: "Box #3",
-        sendFrom: "Box #91",
+        origin: LetterEndpoint(mailboxID: ownedMailboxes[1].id),
+        destination: LetterEndpoint(mailboxID: destinationMailboxes[1].id),
         status: .delivered,
         hasLetter: true,
         letterFormat: .text,
@@ -120,8 +174,8 @@ enum PreviewData {
 
     static let letterAwaitingPickup = LetterSummary(
         trackingNumber: awaitingPickupTrackingNumber,
-        sendTo: "Box #22",
-        sendFrom: "Box #8",
+        origin: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
+        destination: LetterEndpoint(mailboxID: destinationMailboxes[2].id),
         status: .awaitingPickup,
         hasLetter: true,
         letterFormat: .text,
@@ -134,8 +188,8 @@ enum PreviewData {
 
     static let letterOutForDelivery = LetterSummary(
         trackingNumber: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-        sendTo: "Box #105",
-        sendFrom: "Box #2",
+        origin: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
+        destination: LetterEndpoint(mailboxID: destinationMailboxes[3].id),
         status: .outForDelivery,
         hasLetter: false,
         letterFormat: nil,
@@ -148,8 +202,8 @@ enum PreviewData {
 
     static let letterFailed = LetterSummary(
         trackingNumber: failedTrackingNumber,
-        sendTo: "Box #55",
-        sendFrom: "Box #19",
+        origin: LetterEndpoint(mailboxID: ownedMailboxes[1].id),
+        destination: LetterEndpoint(mailboxID: destinationMailboxes[4].id),
         status: .failed,
         hasLetter: true,
         letterFormat: .image,
@@ -172,8 +226,8 @@ enum PreviewData {
 
     static let trackingInfoInTransit = TrackingInfo(
         status: .inTransit,
-        toBox: "Box #47",
-        fromBox: "Box #12",
+        destination: LetterEndpoint(mailboxID: destinationMailboxes[0].id),
+        origin: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
         trackingNumber: inTransitTrackingNumber
     )
 

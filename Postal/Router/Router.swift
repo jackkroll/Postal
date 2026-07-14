@@ -54,8 +54,8 @@ import Observation
             LettersListView()
         case .ship:
             ShipLetterView()
-        default:
-            EmptyView()
+        case .claimBox:
+            ClaimMailboxView()
         }
     }
 }

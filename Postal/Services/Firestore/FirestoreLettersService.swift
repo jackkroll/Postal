@@ -41,8 +41,8 @@ final class FirestoreLettersService: LettersProviding {
 
         return LetterSummary(
             trackingNumber: document.documentID,
-            sendTo: sendTo,
-            sendFrom: sendFrom,
+            origin: LetterEndpoint(rawValue: sendFrom),
+            destination: LetterEndpoint(rawValue: sendTo),
             status: status,
             hasLetter: data["hasLetter"] as? Bool ?? false,
             letterFormat: (data["letterFormat"] as? String).flatMap(LetterFormat.init(rawValue:)),

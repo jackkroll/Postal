@@ -124,8 +124,8 @@ extension APIClient {
             body.append("\(value)\(lineBreak)".data(using: .utf8)!)
         }
 
-        appendField("origin_box_id", request.originBoxID)
-        appendField("destination_box_id", request.destinationBoxID)
+        appendField("origin_box_id", request.originBoxID.rawValue)
+        appendField("destination_box_id", request.destinationBoxID.rawValue)
 
         if let letter = request.letter {
             appendField("letter_format", letter.format.rawValue)
