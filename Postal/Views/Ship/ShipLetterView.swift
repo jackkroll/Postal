@@ -27,12 +27,15 @@ struct ShipLetterView: View {
                             .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    Picker("Send from", selection: $viewmodel.selectedOriginMailbox) {
-                        Text("Select a mailbox").tag(Optional<MailboxSummary>.none)
+                    // Menu + ID-based selection avoids Picker hashing large MailboxSummary
+                    // values on every open/selection, which was causing menu lag.
+                    Picker("Send from", selection: $viewmodel.selectedOriginMailboxID) {
+                        Text("Select a mailbox").tag(Optional<MailboxID>.none)
                         ForEach(viewmodel.ownedMailboxes) { mailbox in
-                            Text(mailbox.pickerLabel).tag(Optional(mailbox))
+                            Text(mailbox.pickerLabel).tag(Optional(mailbox.id))
                         }
                     }
+                    .pickerStyle(.menu)
                 }
             } header: {
                 Text("From")
@@ -68,28 +71,11 @@ struct ShipLetterView: View {
             } footer: {
                 Text("Search for a post office, then enter the destination mailbox code.")
             }
-
-            Section {
-                TextEditor(text: $viewmodel.letterText)
-                    .frame(minHeight: 180)
-
-                HStack {
-                    Text(byteCountLabel)
-                        .font(.caption)
-                        .foregroundStyle(viewmodel.isOverByteLimit ? .red : .secondary)
-                    Spacer()
-                    if viewmodel.letterText.isEmpty {
-                        Text("Required")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+            if let source = viewmodel.selectedOriginMailbox, let destination = viewmodel.selectedDestinationMailbox {
+                NavigationLink(value: ViewRoute.compose(source: source, destination: destination)) {
+                    Text("Compose Letter")
                 }
-            } header: {
-                Text("Message")
-            } footer: {
-                Text("Text letters only for now. Image and drawing support coming later.")
             }
-
             if let errorMessage = viewmodel.errorMessage {
                 Section {
                     Text(errorMessage)
@@ -99,39 +85,14 @@ struct ShipLetterView: View {
         }
         .navigationTitle("Ship Letter")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(viewmodel.isSending ? "Sending…" : "Send") {
-                    Task { await viewmodel.send() }
-                }
-                .disabled(!viewmodel.canSend)
-            }
-        }
-        .onAppear {
-            Task { await viewmodel.loadMailboxes() }
+        .task {
+            await viewmodel.loadMailboxes()
         }
         .sheet(isPresented: $viewmodel.isDestinationPickerPresented) {
             DestinationMailboxPickerSheet(api: viewmodel.api) { mailbox in
                 viewmodel.selectDestination(mailbox)
             }
         }
-        .alert("Letter Sent", isPresented: $viewmodel.showSuccess) {
-            Button("Done") {
-                dismiss()
-            }
-        } message: {
-            if let trackingNumber = viewmodel.createdTrackingNumber {
-                Text("Tracking number:\n\(trackingNumber)")
-            }
-        }
-    }
-
-    private var byteCountLabel: String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        let current = formatter.string(fromByteCount: Int64(viewmodel.letterByteCount))
-        let max = formatter.string(fromByteCount: Int64(ViewModel.maxLetterBytes))
-        return "\(current) / \(max)"
     }
 }
 
@@ -142,31 +103,20 @@ extension ShipLetterView {
 
         let api: APIClient
         var ownedMailboxes: [MailboxSummary] = []
-        var selectedOriginMailbox: MailboxSummary?
+        /// Selection stored by ID so Picker tags stay cheap to hash/diff.
+        var selectedOriginMailboxID: MailboxID?
         var selectedDestinationMailbox: MailboxSummary?
         var isDestinationPickerPresented = false
-
-        var letterText = ""
         var isLoadingMailboxes = false
-        var isSending = false
         var errorMessage: String?
-        var showSuccess = false
-        var createdTrackingNumber: String?
 
-        var letterByteCount: Int {
-            letterText.utf8.count
+        var selectedOriginMailbox: MailboxSummary? {
+            guard let selectedOriginMailboxID else { return nil }
+            return ownedMailboxes.first { $0.id == selectedOriginMailboxID }
         }
 
-        var isOverByteLimit: Bool {
-            letterByteCount > Self.maxLetterBytes
-        }
-
-        var canSend: Bool {
-            !isSending
-                && selectedOriginMailbox != nil
-                && selectedDestinationMailbox != nil
-                && !trimmed(letterText).isEmpty
-                && !isOverByteLimit
+        var canCompose: Bool {
+            selectedOriginMailbox != nil && selectedDestinationMailbox != nil
         }
 
         init(api: APIClient) {
@@ -183,43 +133,16 @@ extension ShipLetterView {
             defer { isLoadingMailboxes = false }
 
             do {
-                let mailboxes = try await api.listOwnedMailboxes()
-                ownedMailboxes = mailboxes.filter(\.owned)
-                if selectedOriginMailbox == nil, ownedMailboxes.count == 1 {
-                    selectedOriginMailbox = ownedMailboxes[0]
+                ownedMailboxes = try await api.listOwnedMailboxes()
+                if selectedOriginMailboxID == nil, ownedMailboxes.count == 1 {
+                    selectedOriginMailboxID = ownedMailboxes[0].id
+                } else if let selectedOriginMailboxID,
+                          !ownedMailboxes.contains(where: { $0.id == selectedOriginMailboxID }) {
+                    self.selectedOriginMailboxID = nil
                 }
             } catch {
                 errorMessage = error.localizedDescription
             }
-        }
-
-        func send() async {
-            guard canSend,
-                  let origin = selectedOriginMailbox,
-                  let destination = selectedDestinationMailbox
-            else { return }
-
-            isSending = true
-            errorMessage = nil
-            defer { isSending = false }
-
-            let request = CreateShipmentRequest(
-                origin: origin,
-                destination: destination,
-                letter: .plain(trimmed(letterText))
-            )
-
-            do {
-                let response = try await api.createShipment(request)
-                createdTrackingNumber = response.trackingNumber
-                showSuccess = true
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-
-        private func trimmed(_ value: String) -> String {
-            value.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 }

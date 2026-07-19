@@ -11,7 +11,7 @@ struct LetterReaderSection: View {
     @State private var isAccessDenied = false
 
     var body: some View {
-        Section("Letter") {
+        ScrollView {
             if isLoading {
                 ProgressView("Loading letter…")
             } else if let content {
@@ -29,8 +29,8 @@ struct LetterReaderSection: View {
             }
         }
         .task(id: shipmentID) {
-            await loadLetter()
-        }
+                await loadLetter()
+            }
     }
 
     private func loadLetter() async {

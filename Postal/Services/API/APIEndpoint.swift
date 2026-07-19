@@ -4,9 +4,18 @@ enum APIEndpoint {
     case health
     case firebaseConfig
     case postOffices(search: String?, limit: Int?)
+    case deleteMyAccount
     case meMailboxes
     case claimMailbox
-    case postOfficeMailboxes(postOfficeID: Int)
+    case meDeviceTokens
+    case registerDeviceToken
+    case unregisterDeviceToken
+    case meNotificationPreferences
+    case updateNotificationPreferences
+    case meInboundLetters(status: ShipmentStatus?, limit: Int?)
+    case meMailboxInboundLetters(mailboxID: String, status: ShipmentStatus?, limit: Int?)
+    case validateMailbox(mailboxID: String)
+    case validatePostOffice(postOfficeID: Int)
     case createShipment
     case listShipments(status: ShipmentStatus?, limit: Int?)
     case shipmentDetail(id: String)
@@ -15,6 +24,11 @@ enum APIEndpoint {
     case publicTrack(trackingNumber: String)
     case publicTrackRoute(trackingNumber: String)
     case location(code: Int)
+    case meAddressbook
+    case addAddressToBook
+    case addressEntry(id: String)
+    case updateAddressEntry(id: String)
+    case deleteAddressEntry(id: String)
 
     var path: String {
         switch self {
@@ -24,10 +38,22 @@ enum APIEndpoint {
             return "/api/firebase-config"
         case .postOffices:
             return "/api/post-offices"
+        case .deleteMyAccount:
+            return "/api/me"
         case .meMailboxes, .claimMailbox:
             return "/api/me/mailboxes"
-        case let .postOfficeMailboxes(postOfficeID):
-            return "/api/post-offices/\(postOfficeID)/mailboxes"
+        case .meDeviceTokens, .registerDeviceToken, .unregisterDeviceToken:
+            return "/api/me/device-tokens"
+        case .meNotificationPreferences, .updateNotificationPreferences:
+            return "/api/me/notification-preferences"
+        case .meInboundLetters:
+            return "/api/me/inbound-letters"
+        case let .meMailboxInboundLetters(mailboxID, _, _):
+            return "/api/me/mailboxes/\(mailboxID)/inbound-letters"
+        case .validateMailbox:
+            return "/api/mailboxes/validate"
+        case let .validatePostOffice(postOfficeID):
+            return "/api/post-offices/\(postOfficeID)/validate"
         case .createShipment:
             return "/api/shipments"
         case .listShipments:
@@ -44,13 +70,21 @@ enum APIEndpoint {
             return "/track/\(trackingNumber)/route"
         case let .location(code):
             return "/api/locations/\(code)"
+        case .meAddressbook, .addAddressToBook:
+            return "/api/me/addressbook"
+        case let .addressEntry(id), let .updateAddressEntry(id), let .deleteAddressEntry(id):
+            return "/api/me/addressbook/\(id)"
         }
     }
 
     var method: String {
         switch self {
-        case .createShipment, .claimMailbox:
+        case .createShipment, .claimMailbox, .registerDeviceToken, .addAddressToBook:
             return "POST"
+        case .updateNotificationPreferences, .updateAddressEntry:
+            return "PUT"
+        case .unregisterDeviceToken, .deleteMyAccount, .deleteAddressEntry:
+            return "DELETE"
         case .shipmentLetter:
             return "GET"
         default:
@@ -78,10 +112,16 @@ enum APIEndpoint {
                 ("search", search),
                 ("limit", limit.map(String.init)),
             ])
-        case let .listShipments(status, limit):
+        case let .listShipments(status, limit),
+             let .meInboundLetters(status, limit),
+             let .meMailboxInboundLetters(_, status, limit):
             components.queryItems = queryItems([
                 ("status", status?.rawValue),
                 ("limit", limit.map(String.init)),
+            ])
+        case let .validateMailbox(mailboxID):
+            components.queryItems = queryItems([
+                ("mailbox_id", mailboxID),
             ])
         default:
             break
@@ -97,3 +137,4 @@ enum APIEndpoint {
         }
     }
 }
+

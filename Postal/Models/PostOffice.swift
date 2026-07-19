@@ -36,6 +36,36 @@ struct PostOffice: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(lon, forKey: .lon)
         try container.encodeIfPresent(tier, forKey: .tier)
     }
+    
+    func getLocationDetails(latitude: Double, longitude: Double) async throws -> String? {
+        let location = CLLocation(latitude: latitude, longitude: longitude)
+        let geocoder = CLGeocoder()
+
+        return try await withCheckedThrowingContinuation { continuation in
+            geocoder.reverseGeocodeLocation(location) { placemarks, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                guard let placemark = placemarks?.first else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                if let city = placemark.locality, let state = placemark.administrativeArea {
+                    continuation.resume(returning: "\(city), \(state)")
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+    
+    func getLocationDetails() async throws -> String? {
+        guard let lat, let lon else { return nil }
+        return try await getLocationDetails(latitude: lat, longitude: lon)
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -46,13 +76,5 @@ struct PostOffice: Codable, Identifiable, Hashable {
         case latitude
         case longitude
         case tier
-    }
-}
-
-struct PostOfficeListResponse: Codable {
-    let postOffices: [PostOffice]
-
-    enum CodingKeys: String, CodingKey {
-        case postOffices = "post_offices"
     }
 }

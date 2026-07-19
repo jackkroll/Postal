@@ -55,13 +55,11 @@ struct TrackingView: View {
                         }
                     }
                 }
-
-                if let shipmentID = viewmodel.shipmentID, viewmodel.letterMetadata != nil {
-                    LetterReaderSection(
-                        shipmentID: shipmentID,
-                        letterMetadata: viewmodel.letterMetadata,
-                        letterService: viewmodel.letterService
-                    )
+                
+                if let shipmentID = viewmodel.shipmentID, let metadata = viewmodel.letterMetadata{
+                    NavigationLink(value: ViewRoute.read(shipmentID: shipmentID, metadata: metadata, service: viewmodel.letterService )) {
+                        Text("View Letter")
+                    }
                 }
 
                 if let errorMessage = viewmodel.errorMessage {
@@ -77,7 +75,8 @@ struct TrackingView: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 await lookup
             }
-            .navigationTitle(viewmodel.currentStatus() ?? "Track")
+            .navigationTitle(viewmodel.currentStatus() ?? "")
+            .animation(.easeInOut,value: viewmodel.currentStatus())
             .toolbar {
                 Button {
                     UIPasteboard.general.string = viewmodel.trackingNumber
@@ -163,6 +162,9 @@ extension TrackingView {
         var isLoading = false
 
         var shipmentID: String? {
+            if let letterSummary {
+                return letterSummary.shipmentID
+            }
             let number = trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines)
             return number.isEmpty ? nil : number
         }

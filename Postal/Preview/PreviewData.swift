@@ -222,6 +222,43 @@ enum PreviewData {
         letterFailed,
     ]
 
+    // MARK: - Inbound Letters
+
+    static let inboundLetters: [InboundLetterItem] = [
+        InboundLetterItem(
+            id: "inbound-in-transit",
+            trackingNumber: inTransitTrackingNumber,
+            status: .inTransit,
+            originName: riversideStation.name,
+            destinationName: mainStreetPostOffice.name,
+            hasLetter: true,
+            letterFormat: .text,
+            createdAt: daysAgo(2),
+            updatedAt: hoursAgo(3)
+        ),
+        InboundLetterItem(
+            id: "inbound-delivered",
+            trackingNumber: deliveredTrackingNumber,
+            status: .delivered,
+            originName: westsideDeliveryOffice.name,
+            destinationName: mainStreetPostOffice.name,
+            hasLetter: true,
+            letterFormat: .text,
+            createdAt: daysAgo(6),
+            updatedAt: daysAgo(1)
+        ),
+        InboundLetterItem(
+            id: "inbound-out-for-delivery",
+            trackingNumber: "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+            status: .outForDelivery,
+            originName: centralSortingFacility.name,
+            destinationName: westsideDeliveryOffice.name,
+            hasLetter: false,
+            createdAt: daysAgo(1),
+            updatedAt: hoursAgo(5)
+        ),
+    ]
+
     // MARK: - Tracking Info
 
     static let trackingInfoInTransit = TrackingInfo(

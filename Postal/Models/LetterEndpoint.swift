@@ -1,8 +1,8 @@
 import Foundation
 
-/// Origin or destination of a letter, as mirrored in Firestore (`sendFrom` / `sendTo`).
+/// Origin or destination of a letter (mailbox id or display label).
 struct LetterEndpoint: Hashable {
-    /// Raw Firestore / API value — usually a mailbox id (`"404:7XK9M"`), sometimes a label.
+    /// Usually a mailbox id (`"404:7XK9M"`), sometimes a post-office name or label.
     let rawValue: String
 
     init(rawValue: String) {

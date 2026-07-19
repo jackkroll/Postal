@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 final class PreviewLetterContentService: LetterContentProviding {
     var contentByShipmentID: [String: LetterContent] = [
@@ -29,31 +30,16 @@ final class PreviewAuthService: AuthProviding {
     func idToken(forceRefresh: Bool) async throws -> String? { "preview-token" }
 }
 
-final class PreviewLettersService: LettersProviding {
-    private let letters: [LetterSummary]
-
-    init(letters: [LetterSummary] = PreviewData.letters) {
-        self.letters = letters
-    }
-
-    func startListening(userID: String, onChange: @escaping ([LetterSummary]) -> Void) -> AnyObject? {
-        onChange(letters)
-        return NSObject()
-    }
-
-    func stopListening(_ token: AnyObject?) {}
-}
-
 // MARK: - View Model Factories
 
 extension LettersListView.ViewModel {
-    static func preview(letters: [LetterSummary] = PreviewData.letters) -> LettersListView.ViewModel {
-        let viewModel = LettersListView.ViewModel(
-            auth: PreviewAuthService(),
-            lettersService: PreviewLettersService(letters: letters),
-            api: APIClient()
-        )
+    static func preview(
+        letters: [LetterSummary] = PreviewData.letters,
+        inboundLetters: [InboundLetterItem] = []
+    ) -> LettersListView.ViewModel {
+        let viewModel = LettersListView.ViewModel(api: APIClient())
         viewModel.letters = letters
+        viewModel.inboundLetters = inboundLetters
         viewModel.mailboxesByID = Dictionary(
             uniqueKeysWithValues: PreviewData.allMailboxes.map { ($0.id, $0) }
         )
@@ -120,10 +106,26 @@ extension ShipLetterView.ViewModel {
     ) -> ShipLetterView.ViewModel {
         let viewModel = ShipLetterView.ViewModel(api: APIClient())
         viewModel.ownedMailboxes = ownedMailboxes
-        viewModel.selectedOriginMailbox = selectedOriginMailbox
+        viewModel.selectedOriginMailboxID = selectedOriginMailbox?.id
         viewModel.selectedDestinationMailbox = selectedDestinationMailbox
-        viewModel.letterText = letterText
         viewModel.errorMessage = errorMessage
+        return viewModel
+    }
+}
+
+extension ComposeView.ViewModel {
+    static func preview(
+        source: MailboxSummary = PreviewData.ownedMailboxes[0],
+        destination: MailboxSummary = PreviewData.destinationMailboxes[0],
+        letterText: String = "",
+        isSending: Bool = false
+    ) -> ComposeView.ViewModel {
+        let viewModel = ComposeView.ViewModel(
+            api: APIClient(),
+            source: source,
+            destination: destination
+        )
+        viewModel.letterText = letterText
         viewModel.isSending = isSending
         return viewModel
     }
@@ -146,5 +148,55 @@ extension ClaimMailboxView.ViewModel {
         viewModel.isClaiming = isClaiming
         viewModel.hasLoadedPostOffices = hasLoadedPostOffices
         return viewModel
+    }
+}
+
+extension SettingsView.ViewModel {
+    static func preview(
+        authorizationStatus: UNAuthorizationStatus = .notDetermined,
+        registeredSummary: DeviceTokenSummary? = nil,
+        errorMessage: String? = nil,
+        isRegistering: Bool = false,
+        sentMode: SentNotificationMode = .shipmentDetails,
+        inboundMode: InboundNotificationMode = .shipmentDetails
+    ) -> SettingsView.ViewModel {
+        let push = PreviewPushNotificationService(authorizationStatus: authorizationStatus)
+        let viewModel = SettingsView.ViewModel(api: APIClient(), auth: PreviewAuthService(), push: push)
+        viewModel.authorizationStatus = authorizationStatus
+        viewModel.registeredSummary = registeredSummary
+        viewModel.errorMessage = errorMessage
+        viewModel.isRegistering = isRegistering
+        viewModel.showSuccess = registeredSummary != nil
+        viewModel.sentMode = sentMode
+        viewModel.inboundMode = inboundMode
+        return viewModel
+    }
+}
+
+final class PreviewPushNotificationService: PushNotificationsProviding {
+    var currentDeviceToken: String? = "preview-device-token"
+    var authorizationStatus: UNAuthorizationStatus
+    var appInstanceID = "preview-app-instance"
+
+    init(authorizationStatus: UNAuthorizationStatus = .notDetermined) {
+        self.authorizationStatus = authorizationStatus
+    }
+
+    func refreshAuthorizationStatus() async {}
+
+    func registerIfAuthorized() async {}
+
+    func requestAuthorizationAndToken() async throws -> String {
+        authorizationStatus = .authorized
+        let token = currentDeviceToken ?? "preview-device-token"
+        currentDeviceToken = token
+        return token
+    }
+
+    func handleDeviceToken(_ deviceToken: Data) {}
+    func handleRegistrationFailure(_ error: Error) {}
+
+    func clearLocalRegistration(userOptedOut: Bool) {
+        currentDeviceToken = nil
     }
 }

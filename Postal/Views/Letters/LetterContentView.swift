@@ -24,7 +24,7 @@ private struct TextLetterView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ScrollView {
             if isMarkdown {
                 Text(LocalizedStringKey(text))
             } else {
@@ -33,6 +33,7 @@ private struct TextLetterView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
+        .padding()
     }
 }
 

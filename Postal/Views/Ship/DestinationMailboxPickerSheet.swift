@@ -18,9 +18,21 @@ struct DestinationMailboxPickerSheet: View {
         NavigationStack {
             Group {
                 if let selectedPostOffice {
-                    mailboxCodeEntry(for: selectedPostOffice)
+                    MailboxCodeEntryView(
+                        postOffice: selectedPostOffice,
+                        mailboxCode: $mailboxCode,
+                        isValidating: isValidatingMailbox,
+                        errorMessage: errorMessage
+                    )
                 } else {
-                    postOfficeList
+                    PostOfficeListView(
+                        postOffices: postOffices,
+                        searchText: $searchText,
+                        isLoading: isLoadingPostOffices,
+                        errorMessage: errorMessage,
+                        onRetry: { Task { await searchPostOffices() } },
+                        onSelect: selectPostOffice(_:)
+                    )
                 }
             }
             .navigationTitle(selectedPostOffice?.name ?? "Choose Destination")
@@ -33,17 +45,16 @@ struct DestinationMailboxPickerSheet: View {
                         Button("Cancel") { dismiss() }
                     }
                 }
+
                 if selectedPostOffice != nil {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            selectedPostOffice = nil
-                            mailboxCode = ""
-                            searchText = ""
-                            errorMessage = nil
+                            clearSelection()
                         } label: {
                             Label("Post Offices", systemImage: "chevron.left")
                         }
                     }
+
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Select") {
                             if let selectedPostOffice {
@@ -55,7 +66,7 @@ struct DestinationMailboxPickerSheet: View {
                 }
             }
             .overlay {
-                if showsLoadingOverlay {
+                if isLoadingPostOffices && !hasLoadedPostOffices {
                     ProgressView()
                         .controlSize(.large)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -72,82 +83,21 @@ struct DestinationMailboxPickerSheet: View {
     }
 
     private var canConfirmMailbox: Bool {
-        !mailboxCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        MailboxCodeValidation.isValid(mailboxCode)
     }
 
-    private var showsLoadingOverlay: Bool {
-        isLoadingPostOffices && !hasLoadedPostOffices
+    private func selectPostOffice(_ office: PostOffice) {
+        selectedPostOffice = office
+        mailboxCode = ""
+        searchText = ""
+        errorMessage = nil
     }
 
-    @ViewBuilder
-    private var postOfficeList: some View {
-        Group {
-            if let errorMessage {
-                ContentUnavailableView {
-                    Label("Couldn't Load", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(errorMessage)
-                }
-            } else if postOffices.isEmpty, !isLoadingPostOffices {
-                ContentUnavailableView.search(text: searchText)
-            } else {
-                List(postOffices) { office in
-                    Button {
-                        selectedPostOffice = office
-                        mailboxCode = ""
-                        searchText = ""
-                        errorMessage = nil
-                    } label: {
-                        Text(office.name)
-                            .foregroundStyle(.primary)
-                    }
-                }
-                .listStyle(.plain)
-            }
-        }
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search post offices"
-        )
-    }
-
-    @ViewBuilder
-    private func mailboxCodeEntry(for postOffice: PostOffice) -> some View {
-        Form {
-            Section {
-                Text(postOffice.name)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Post Office")
-            }
-
-            Section {
-                TextField("Mailbox code", text: $mailboxCode, prompt: Text("7XK9M"))
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .font(.body.monospaced())
-
-                if isValidatingMailbox {
-                    HStack {
-                        ProgressView()
-                        Text("Looking up mailbox…")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } header: {
-                Text("Mailbox Code")
-            } footer: {
-                Text("Enter the destination mailbox code at this post office.")
-            }
-
-            if let errorMessage {
-                Section {
-                    Text(errorMessage)
-                        .foregroundStyle(.red)
-                }
-            }
-        }
+    private func clearSelection() {
+        selectedPostOffice = nil
+        mailboxCode = ""
+        searchText = ""
+        errorMessage = nil
     }
 
     private func searchPostOffices() async {
@@ -164,12 +114,19 @@ struct DestinationMailboxPickerSheet: View {
         }
 
         do {
-            postOffices = try await api.listPostOffices(
+            let offices = try await api.listPostOffices(
                 search: query.isEmpty ? nil : query,
                 limit: 100
             )
+            try Task.checkCancellation()
+            postOffices = offices
             hasLoadedPostOffices = true
+        } catch is CancellationError {
+            // Debounced `.task(id:)` cancels in-flight work when the query changes.
+        } catch let error as URLError where error.code == .cancelled {
+            // URLSession surfaces cancellation this way.
         } catch {
+            guard !Task.isCancelled else { return }
             postOffices = []
             errorMessage = error.localizedDescription
             hasLoadedPostOffices = true
@@ -177,15 +134,23 @@ struct DestinationMailboxPickerSheet: View {
     }
 
     private func confirmMailbox(for postOffice: PostOffice) async {
-        let code = mailboxCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !code.isEmpty else { return }
+        guard PostOfficeValidation.isValidID(postOffice.id) else {
+            errorMessage = MailboxLookupError.invalidPostOfficeID(postOffice.id).localizedDescription
+            return
+        }
+
+        let code = MailboxCodeValidation.normalized(mailboxCode)
+        guard MailboxCodeValidation.isValid(code) else {
+            errorMessage = MailboxLookupError.invalidMailboxCode(code).localizedDescription
+            return
+        }
 
         isValidatingMailbox = true
         errorMessage = nil
         defer { isValidatingMailbox = false }
 
         do {
-            let mailbox = try await api.lookupMailbox(postOfficeID: postOffice.id, code: code)
+            let mailbox = try await api.lookupMailbox(postOffice: postOffice, code: code)
             onSelect(mailbox)
             dismiss()
         } catch let error as MailboxLookupError {
@@ -196,14 +161,130 @@ struct DestinationMailboxPickerSheet: View {
     }
 }
 
-enum MailboxLookupError: LocalizedError {
-    case notFound(code: String)
+// MARK: - Post Office List
 
-    var errorDescription: String? {
-        switch self {
-        case let .notFound(code):
-            return "No mailbox found with code \(code) at this post office."
+private struct PostOfficeListView: View {
+    let postOffices: [PostOffice]
+    @Binding var searchText: String
+    let isLoading: Bool
+    let errorMessage: String?
+    let onRetry: () -> Void
+    let onSelect: (PostOffice) -> Void
+
+    var body: some View {
+        Group {
+            if let errorMessage, postOffices.isEmpty, !isLoading {
+                ContentUnavailableView {
+                    Label("Couldn't Load", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(errorMessage)
+                } actions: {
+                    Button("Try Again", action: onRetry)
+                }
+            } else if postOffices.isEmpty, !isLoading {
+                ContentUnavailableView.search(text: searchText)
+            } else {
+                List(postOffices) { office in
+                    Button {
+                        onSelect(office)
+                    } label: {
+                        PostOfficeLocationRow(postOffice: office)
+                    }
+                }
+                .listStyle(.plain)
+            }
         }
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search post offices"
+        )
+    }
+}
+
+/// One row per post office so location-specific state can live next to the office it describes.
+private struct PostOfficeLocationRow: View {
+    let postOffice: PostOffice
+
+    @State private var locationLabel: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(postOffice.name)
+                .foregroundStyle(.primary)
+
+            if let locationLabel {
+                Text(locationLabel)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: postOffice.id) {
+            guard let details = try? await postOffice.getLocationDetails() else { return }
+            locationLabel = details
+        }
+    }
+}
+
+// MARK: - Mailbox Code Entry
+
+private struct MailboxCodeEntryView: View {
+    let postOffice: PostOffice
+    @Binding var mailboxCode: String
+    let isValidating: Bool
+    let errorMessage: String?
+
+    var body: some View {
+        Form {
+            Section {
+                Text(postOffice.name)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Post Office")
+            }
+
+            Section {
+                TextField("Mailbox code", text: $mailboxCode, prompt: Text("7XK9M"))
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .font(.body.monospaced())
+                    .onChange(of: mailboxCode) { _, newValue in
+                        let sanitized = Self.sanitizedMailboxCode(newValue)
+                        if sanitized != newValue {
+                            mailboxCode = sanitized
+                        }
+                    }
+
+                if isValidating {
+                    HStack {
+                        ProgressView()
+                        Text("Looking up mailbox…")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Mailbox Code")
+            } footer: {
+                Text("Enter the destination mailbox code at this post office (letters and numbers only).")
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    /// Forces uppercase alphanumeric codes so paste / hardware keyboards stay consistent
+    /// with soft-keyboard autocapitalization.
+    private static func sanitizedMailboxCode(_ raw: String) -> String {
+        let uppercased = raw.uppercased()
+        let filtered = uppercased.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        return String(String.UnicodeScalarView(filtered).prefix(MailboxCodeValidation.maximumLength))
     }
 }
 
@@ -212,10 +293,13 @@ enum MailboxLookupError: LocalizedError {
 }
 
 #Preview("Mailbox Code") {
-    struct PreviewHost: View {
-        var body: some View {
-            DestinationMailboxPickerSheet(api: APIClient()) { _ in }
-        }
+    DestinationMailboxPickerSheet(api: APIClient()) { _ in }
+}
+
+#Preview("Post Office Row") {
+    List {
+        PostOfficeLocationRow(postOffice: PreviewData.mainStreetPostOffice)
+        PostOfficeLocationRow(postOffice: PreviewData.riversideStation)
+        PostOfficeLocationRow(postOffice: PreviewData.westsideDeliveryOffice)
     }
-    return PreviewHost()
 }

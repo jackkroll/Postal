@@ -1,6 +1,6 @@
 import Foundation
 
-/// Fetches letter bytes from the PostalSim API (not Firestore).
+/// Fetches letter bytes from the PostalSim API.
 protocol LetterContentProviding: AnyObject {
     func fetchLetter(shipmentID: String, expectedFormat: LetterFormat?) async throws -> LetterContent
     func probeLetter(shipmentID: String) async throws -> LetterProbe

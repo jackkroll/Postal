@@ -57,11 +57,49 @@ final class APIClient {
         try await request(endpoint, body: body, authenticated: authenticated)
     }
 
+    func put<Body: Encodable, Response: Decodable>(
+        _ endpoint: APIEndpoint,
+        body: Body,
+        authenticated: Bool = true
+    ) async throws -> Response {
+        try await request(endpoint, body: body, authenticated: authenticated)
+    }
+
+    func delete<Body: Encodable, Response: Decodable>(
+        _ endpoint: APIEndpoint,
+        body: Body,
+        authenticated: Bool = true
+    ) async throws -> Response {
+        try await request(endpoint, body: body, authenticated: authenticated)
+    }
+
+    /// Performs a DELETE that returns no body (e.g. HTTP 204).
+    func delete(_ endpoint: APIEndpoint, authenticated: Bool = true) async throws {
+        try await requestNoContent(endpoint, authenticated: authenticated)
+    }
+
     private func request<Body: Encodable, Response: Decodable>(
         _ endpoint: APIEndpoint,
         body: Body?,
         authenticated: Bool
     ) async throws -> Response {
+        let data = try await perform(endpoint, body: body, authenticated: authenticated)
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            throw APIError.decodingFailed(Self.decodingErrorMessage(error))
+        }
+    }
+
+    private func requestNoContent(_ endpoint: APIEndpoint, authenticated: Bool) async throws {
+        _ = try await perform(endpoint, body: Optional<String>.none, authenticated: authenticated)
+    }
+
+    private func perform<Body: Encodable>(
+        _ endpoint: APIEndpoint,
+        body: Body?,
+        authenticated: Bool
+    ) async throws -> Data {
         var request = URLRequest(url: endpoint.url(baseURL: baseURL))
         request.httpMethod = endpoint.method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -85,18 +123,31 @@ final class APIClient {
             throw APIError.httpStatus(httpResponse.statusCode, message)
         }
 
-        do {
-            return try decoder.decode(Response.self, from: data)
-        } catch {
-            throw APIError.decodingFailed(Self.decodingErrorMessage(error))
-        }
+        return data
     }
 
     static func apiErrorDetail(from data: Data) -> String? {
-        struct ErrorBody: Decodable {
+        struct StringDetailBody: Decodable {
             let detail: String
         }
-        return (try? JSONDecoder().decode(ErrorBody.self, from: data))?.detail
+        if let body = try? JSONDecoder().decode(StringDetailBody.self, from: data) {
+            return body.detail
+        }
+
+        struct ValidationIssue: Decodable {
+            let msg: String
+        }
+        struct ArrayDetailBody: Decodable {
+            let detail: [ValidationIssue]
+        }
+        if let body = try? JSONDecoder().decode(ArrayDetailBody.self, from: data) {
+            let messages = body.detail.map(\.msg).filter { !$0.isEmpty }
+            if !messages.isEmpty {
+                return messages.joined(separator: "\n")
+            }
+        }
+
+        return nil
     }
 
     static func decodingErrorMessage(_ error: Error) -> String {

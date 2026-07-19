@@ -7,10 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		56C00CF72FFFF39A009FA92D /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 56C00CF62FFFF39A009FA92D /* FirebaseAuth */; };
-		56C00CF92FFFF39A009FA92D /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 56C00CF82FFFF39A009FA92D /* FirebaseCore */; };
-		56C00CFB2FFFF39A009FA92D /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 56C00CFA2FFFF39A009FA92D /* FirebaseFirestore */; };
-		56C00CFE2FFFF3A7009FA92D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 56C00CFD2FFFF3A7009FA92D /* FirebaseStorage */; };
+		56D3D81930096ED900682844 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 56D3D81830096ED900682844 /* FirebaseAuth */; };
+		56D3D81B30096ED900682844 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 56D3D81A30096ED900682844 /* FirebaseCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,10 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				56C00CF92FFFF39A009FA92D /* FirebaseCore in Frameworks */,
-				56C00CFE2FFFF3A7009FA92D /* FirebaseStorage in Frameworks */,
-				56C00CF72FFFF39A009FA92D /* FirebaseAuth in Frameworks */,
-				56C00CFB2FFFF39A009FA92D /* FirebaseFirestore in Frameworks */,
+				56D3D81B30096ED900682844 /* FirebaseCore in Frameworks */,
+				56D3D81930096ED900682844 /* FirebaseAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,10 +80,8 @@
 			);
 			name = Postal;
 			packageProductDependencies = (
-				56C00CF62FFFF39A009FA92D /* FirebaseAuth */,
-				56C00CF82FFFF39A009FA92D /* FirebaseCore */,
-				56C00CFA2FFFF39A009FA92D /* FirebaseFirestore */,
-				56C00CFD2FFFF3A7009FA92D /* FirebaseStorage */,
+				56D3D81830096ED900682844 /* FirebaseAuth */,
+				56D3D81A30096ED900682844 /* FirebaseCore */,
 			);
 			productName = Postal;
 			productReference = 56DB1E9B2FF44C2B00D330D8 /* Postal.app */;
@@ -118,7 +112,7 @@
 			mainGroup = 56DB1E922FF44C2B00D330D8;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				56C00CF52FFFF39A009FA92D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				56D3D81730096ED900682844 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 56DB1E9C2FF44C2B00D330D8 /* Products */;
@@ -277,12 +271,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = PostalAppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Postal/Postal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZS9H682SJQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -309,12 +304,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = PostalAppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Postal/Postal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZS9H682SJQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -360,7 +356,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		56C00CF52FFFF39A009FA92D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+		56D3D81730096ED900682844 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
 			requirement = {
@@ -371,25 +367,15 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		56C00CF62FFFF39A009FA92D /* FirebaseAuth */ = {
+		56D3D81830096ED900682844 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 56C00CF52FFFF39A009FA92D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 56D3D81730096ED900682844 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
 		};
-		56C00CF82FFFF39A009FA92D /* FirebaseCore */ = {
+		56D3D81A30096ED900682844 /* FirebaseCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 56C00CF52FFFF39A009FA92D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 56D3D81730096ED900682844 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
-		};
-		56C00CFA2FFFF39A009FA92D /* FirebaseFirestore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 56C00CF52FFFF39A009FA92D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseFirestore;
-		};
-		56C00CFD2FFFF3A7009FA92D /* FirebaseStorage */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 56C00CF52FFFF39A009FA92D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseStorage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

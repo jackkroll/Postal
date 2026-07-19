@@ -137,7 +137,8 @@ extension ClaimMailboxView {
         var showSuccess = false
 
         var canClaim: Bool {
-            selectedPostOffice != nil && !isClaiming
+            guard let postOffice = selectedPostOffice else { return false }
+            return PostOfficeValidation.isValidID(postOffice.id) && !isClaiming
         }
 
         var showsLoadingOverlay: Bool {
@@ -186,6 +187,10 @@ extension ClaimMailboxView {
 
         func claim() async {
             guard let postOffice = selectedPostOffice else { return }
+            guard PostOfficeValidation.isValidID(postOffice.id) else {
+                errorMessage = MailboxLookupError.invalidPostOfficeID(postOffice.id).localizedDescription
+                return
+            }
 
             isClaiming = true
             errorMessage = nil

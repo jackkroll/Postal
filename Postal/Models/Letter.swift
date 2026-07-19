@@ -6,7 +6,7 @@ enum LetterFormat: String, Codable, Hashable {
     case encoded
 }
 
-/// Metadata returned on shipment create and mirrored in Firestore (no bytes).
+/// Metadata returned on shipment create and shipment detail (no bytes).
 struct LetterMetadata: Codable, Hashable {
     let format: LetterFormat
     let mimeType: String
