@@ -6,14 +6,18 @@ struct PostOffice: Codable, Identifiable, Hashable {
     let name: String
     let lat: Double?
     let lon: Double?
+    let city: String?
+    let state: String?
     let tier: Int?
 
-    init(id: Int, name: String, lat: Double? = nil, lon: Double? = nil, tier: Int? = nil) {
+    init(id: Int, name: String, lat: Double? = nil, lon: Double? = nil, tier: Int? = nil, city: String? = nil, state: String? = nil) {
         self.id = id
         self.name = name
         self.lat = lat
         self.lon = lon
         self.tier = tier
+        self.city = city
+        self.state = state
     }
 
     init(from decoder: Decoder) throws {
@@ -26,6 +30,8 @@ struct PostOffice: Codable, Identifiable, Hashable {
         lon = try container.decodeIfPresent(Double.self, forKey: .lon)
             ?? container.decodeIfPresent(Double.self, forKey: .longitude)
         tier = try container.decodeIfPresent(Int.self, forKey: .tier)
+        city = try container.decodeIfPresent(String.self, forKey: .city)
+        state = try container.decodeIfPresent(String.self, forKey: .state)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -35,15 +41,23 @@ struct PostOffice: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(lat, forKey: .lat)
         try container.encodeIfPresent(lon, forKey: .lon)
         try container.encodeIfPresent(tier, forKey: .tier)
+        try container.encodeIfPresent(city, forKey: .city)
+        try container.encodeIfPresent(state, forKey: .state)
     }
-    
-    func getLocationDetails(latitude: Double, longitude: Double) async throws -> String? {
-        let location = CLLocation(latitude: latitude, longitude: longitude)
+
+    func getLocationDetails() async throws -> String? {
+        if let state, let city {
+            return "\(city), \(state)"
+        }
+
+        guard let lat, let lon else { return nil }
+
+        let location = CLLocation(latitude: lat, longitude: lon)
         let geocoder = CLGeocoder()
 
         return try await withCheckedThrowingContinuation { continuation in
             geocoder.reverseGeocodeLocation(location) { placemarks, error in
-                if let error = error {
+                if let error {
                     continuation.resume(throwing: error)
                     return
                 }
@@ -61,11 +75,6 @@ struct PostOffice: Codable, Identifiable, Hashable {
             }
         }
     }
-    
-    func getLocationDetails() async throws -> String? {
-        guard let lat, let lon else { return nil }
-        return try await getLocationDetails(latitude: lat, longitude: lon)
-    }
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -76,5 +85,7 @@ struct PostOffice: Codable, Identifiable, Hashable {
         case latitude
         case longitude
         case tier
+        case city
+        case state
     }
 }

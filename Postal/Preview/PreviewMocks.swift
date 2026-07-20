@@ -198,6 +198,16 @@ extension SettingsView.ViewModel {
     }
 }
 
+extension AddressBook.ViewModel {
+    static func preview(
+        addresses: [AddressBookEntrySummary] = PreviewData.addressBookEntries
+    ) -> AddressBook.ViewModel {
+        let viewModel = AddressBook.ViewModel(api: APIClient())
+        viewModel.addresses = addresses
+        return viewModel
+    }
+}
+
 final class PreviewPushNotificationService: PushNotificationsProviding {
     var currentDeviceToken: String? = "preview-device-token"
     var authorizationStatus: UNAuthorizationStatus

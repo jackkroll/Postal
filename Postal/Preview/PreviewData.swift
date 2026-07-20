@@ -119,6 +119,55 @@ enum PreviewData {
         ownedMailboxes + destinationMailboxes
     }
 
+    // MARK: - Address Book
+
+    static let addressBookEntries: [AddressBookEntrySummary] = [
+        AddressBookEntrySummary(
+            id: "addr-entry-1",
+            nickname: "Alex",
+            mailboxID: destinationMailboxes[0].id,
+            notes: "College roommate",
+            postOfficeID: destinationMailboxes[0].postOfficeID,
+            postOfficeName: destinationMailboxes[0].postOfficeName,
+            mailboxLabel: destinationMailboxes[0].label,
+            createdAt: daysAgo(30),
+            updatedAt: daysAgo(5)
+        ),
+        AddressBookEntrySummary(
+            id: "addr-entry-2",
+            nickname: "Jordan",
+            mailboxID: destinationMailboxes[1].id,
+            notes: nil,
+            postOfficeID: destinationMailboxes[1].postOfficeID,
+            postOfficeName: destinationMailboxes[1].postOfficeName,
+            mailboxLabel: destinationMailboxes[1].label,
+            createdAt: daysAgo(14),
+            updatedAt: daysAgo(14)
+        ),
+        AddressBookEntrySummary(
+            id: "addr-entry-3",
+            nickname: "Sam (Riverside)",
+            mailboxID: destinationMailboxes[2].id,
+            notes: "Sends letters every few weeks",
+            postOfficeID: destinationMailboxes[2].postOfficeID,
+            postOfficeName: destinationMailboxes[2].postOfficeName,
+            mailboxLabel: destinationMailboxes[2].label,
+            createdAt: daysAgo(7),
+            updatedAt: hoursAgo(12)
+        ),
+        AddressBookEntrySummary(
+            id: "addr-entry-4",
+            nickname: "Westside Drop",
+            mailboxID: destinationMailboxes[3].id,
+            notes: "Work contact",
+            postOfficeID: destinationMailboxes[3].postOfficeID,
+            postOfficeName: destinationMailboxes[3].postOfficeName,
+            mailboxLabel: destinationMailboxes[3].label,
+            createdAt: daysAgo(2),
+            updatedAt: daysAgo(2)
+        ),
+    ]
+
     // MARK: - Tracking Numbers
 
     static let inTransitTrackingNumber = "f47ac10b-58cc-4372-a567-0e02b2c3d479"

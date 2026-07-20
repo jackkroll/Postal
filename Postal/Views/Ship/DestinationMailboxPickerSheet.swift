@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DestinationMailboxPickerSheet: View {
     let api: APIClient
+    var title: String = "Choose Destination"
     let onSelect: (MailboxSummary) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -35,7 +36,7 @@ struct DestinationMailboxPickerSheet: View {
                     )
                 }
             }
-            .navigationTitle(selectedPostOffice?.name ?? "Choose Destination")
+            .navigationTitle(selectedPostOffice?.name ?? title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

@@ -62,7 +62,7 @@ import Observation
                 auth: AppServices.auth,
                 push: AppServices.pushNotifications))
         case .addressbook:
-            ContentUnavailableView("Coming Soon", systemImage: "clock.fill")
+            AddressBook(viewmodel: .init(api: AppServices.api))
         case .compose(source: let source, destination: let destination):
             ComposeView(viewmodel: .init(
                 api: AppServices.api,
