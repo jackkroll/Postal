@@ -14,10 +14,12 @@ struct RootView: View {
                 }
             }
             .navigationDestination(for: ViewRoute.self) { route in
+                // Destinations do not reliably inherit environment from the stack root.
                 Router.view(for: route)
+                    .environment(router)
             }
-            .environment(router)
         }
+        .environment(router)
     }
 }
 

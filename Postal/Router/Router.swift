@@ -53,7 +53,7 @@ import Observation
         case .landing:
             LettersListView()
         case .ship:
-            ShipLetterView()
+            LetterCreationView(viewmodel: .init(api: AppServices.api))
         case .claimBox:
             ClaimMailboxView()
         case .settings:

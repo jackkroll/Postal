@@ -113,6 +113,31 @@ extension ShipLetterView.ViewModel {
     }
 }
 
+extension LetterCreationView.ViewModel {
+    static func preview(
+        phase: LetterCreationPhase = .destination,
+        ownedMailboxes: [MailboxSummary] = PreviewData.ownedMailboxes,
+        selectedOriginMailbox: MailboxSummary? = nil,
+        selectedDestinationMailbox: MailboxSummary? = nil,
+        letterText: String = "",
+        isStampApplied: Bool = false,
+        isSending: Bool = false
+    ) -> LetterCreationView.ViewModel {
+        let viewModel = LetterCreationView.ViewModel(api: APIClient())
+        viewModel.phase = phase
+        viewModel.envelopeVisible = true
+        viewModel.letterPlacement = phase == .compose ? .revealed : .tucked
+        viewModel.ownedMailboxes = ownedMailboxes
+        viewModel.selectedOriginMailboxID = selectedOriginMailbox?.id
+        viewModel.selectedDestinationMailbox = selectedDestinationMailbox
+        viewModel.letterText = letterText
+        viewModel.recomputeLetterMetrics(from: letterText)
+        viewModel.isStampApplied = isStampApplied
+        viewModel.isSending = isSending
+        return viewModel
+    }
+}
+
 extension ComposeView.ViewModel {
     static func preview(
         source: MailboxSummary = PreviewData.ownedMailboxes[0],
