@@ -6,6 +6,7 @@ struct DestinationMailboxPickerSheet: View {
     /// Address Book shortcut for destination picking. Hidden when already selecting from the book
     /// (e.g. nested mailbox lookup while editing an address-book entry).
     var showsAddressBookShortcut: Bool = true
+    private let loadsOnAppear: Bool
     let onSelect: (MailboxSummary) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -17,6 +18,25 @@ struct DestinationMailboxPickerSheet: View {
     @State private var isValidatingMailbox = false
     @State private var hasLoadedPostOffices = false
     @State private var errorMessage: String?
+
+    init(
+        api: APIClient,
+        title: String = "Choose Destination",
+        showsAddressBookShortcut: Bool = true,
+        loadsOnAppear: Bool = true,
+        initialPostOffices: [PostOffice] = [],
+        selectedPostOffice: PostOffice? = nil,
+        onSelect: @escaping (MailboxSummary) -> Void
+    ) {
+        self.api = api
+        self.title = title
+        self.showsAddressBookShortcut = showsAddressBookShortcut
+        self.loadsOnAppear = loadsOnAppear
+        self.onSelect = onSelect
+        _postOffices = State(initialValue: initialPostOffices)
+        _selectedPostOffice = State(initialValue: selectedPostOffice)
+        _hasLoadedPostOffices = State(initialValue: !initialPostOffices.isEmpty || selectedPostOffice != nil)
+    }
 
     var body: some View {
         NavigationStack {
@@ -92,6 +112,7 @@ struct DestinationMailboxPickerSheet: View {
             }
         }
         .task(id: searchText) {
+            guard loadsOnAppear else { return }
             guard selectedPostOffice == nil else { return }
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
@@ -306,11 +327,19 @@ private struct MailboxCodeEntryView: View {
 }
 
 #Preview("Post Offices") {
-    DestinationMailboxPickerSheet(api: APIClient()) { _ in }
+    DestinationMailboxPickerSheet(
+        api: APIClient(),
+        loadsOnAppear: false,
+        initialPostOffices: PreviewData.postOffices
+    ) { _ in }
 }
 
 #Preview("Mailbox Code") {
-    DestinationMailboxPickerSheet(api: APIClient()) { _ in }
+    DestinationMailboxPickerSheet(
+        api: APIClient(),
+        loadsOnAppear: false,
+        selectedPostOffice: PreviewData.mainStreetPostOffice
+    ) { _ in }
 }
 
 #Preview("Post Office Row") {

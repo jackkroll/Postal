@@ -229,6 +229,15 @@ final class PreviewPushNotificationService: PushNotificationsProviding {
 
     func registerIfAuthorized() async {}
 
+    func deviceTokenIfAuthorized() async throws -> String? {
+        switch authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return currentDeviceToken ?? "preview-device-token"
+        default:
+            return nil
+        }
+    }
+
     func requestAuthorizationAndToken() async throws -> String {
         authorizationStatus = .authorized
         let token = currentDeviceToken ?? "preview-device-token"

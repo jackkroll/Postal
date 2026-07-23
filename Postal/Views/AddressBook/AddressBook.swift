@@ -12,8 +12,19 @@ struct AddressBook: View {
     @State var viewmodel: ViewModel
     /// When set, the book is used to pick an address (no browse-only actions like Send Letter).
     var onSelect: ((AddressBookEntrySummary) -> Void)? = nil
+    private let loadsOnAppear: Bool
 
     private var isSelecting: Bool { onSelect != nil }
+
+    init(
+        viewmodel: ViewModel,
+        loadsOnAppear: Bool = true,
+        onSelect: ((AddressBookEntrySummary) -> Void)? = nil
+    ) {
+        _viewmodel = State(initialValue: viewmodel)
+        self.loadsOnAppear = loadsOnAppear
+        self.onSelect = onSelect
+    }
 
     var body: some View {
         Group {
@@ -58,9 +69,9 @@ struct AddressBook: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .onAppear {
-            guard !isSelecting else { return }
-            Task { await viewmodel.fetchOwnedMailboxes() }
+        .task {
+            guard loadsOnAppear else { return }
+            await viewmodel.refresh()
         }
     }
 }
@@ -493,9 +504,6 @@ extension AddressBook {
             self.api = api
             self.addresses = []
             self.ownedMailboxes = []
-            Task {
-                await refresh()
-            }
         }
 
         func presentAdd() {
@@ -557,25 +565,25 @@ extension AddressBook {
 
 #Preview("Empty") {
     NavigationStack {
-        AddressBook(viewmodel: .preview(addresses: [], ownedMailboxes: []))
+        AddressBook(viewmodel: .preview(addresses: [], ownedMailboxes: []), loadsOnAppear: false)
     }
 }
 
 #Preview("Populated") {
     NavigationStack {
-        AddressBook(viewmodel: .preview())
+        AddressBook(viewmodel: .preview(), loadsOnAppear: false)
     }
 }
 
 #Preview("Mailboxes Only") {
     NavigationStack {
-        AddressBook(viewmodel: .preview(addresses: []))
+        AddressBook(viewmodel: .preview(addresses: []), loadsOnAppear: false)
     }
 }
 
 #Preview("Selection") {
     NavigationStack {
-        AddressBook(viewmodel: .preview()) { _ in }
+        AddressBook(viewmodel: .preview(), loadsOnAppear: false) { _ in }
     }
 }
 

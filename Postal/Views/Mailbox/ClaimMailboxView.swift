@@ -3,9 +3,14 @@ import SwiftUI
 struct ClaimMailboxView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewmodel: ViewModel
+    private let loadsOnAppear: Bool
 
-    init(viewmodel: ViewModel = ViewModel(api: AppServices.api)) {
+    init(
+        viewmodel: ViewModel = ViewModel(api: AppServices.api),
+        loadsOnAppear: Bool = true
+    ) {
         _viewmodel = State(initialValue: viewmodel)
+        self.loadsOnAppear = loadsOnAppear
     }
 
     var body: some View {
@@ -21,8 +26,10 @@ struct ClaimMailboxView: View {
         .toolbar {
             if viewmodel.selectedPostOffice != nil {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(viewmodel.isClaiming ? "Claiming…" : "Claim") {
+                    Button {
                         Task { await viewmodel.claim() }
+                    } label: {
+                        Text(viewmodel.isClaiming ? "Claiming…" : "Claim")
                     }
                     .disabled(!viewmodel.canClaim)
                 }
@@ -46,6 +53,7 @@ struct ClaimMailboxView: View {
             }
         }
         .task(id: viewmodel.searchText) {
+            guard loadsOnAppear else { return }
             guard viewmodel.selectedPostOffice == nil else { return }
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
@@ -209,7 +217,7 @@ extension ClaimMailboxView {
 
 #Preview("Post Offices") {
     NavigationStack {
-        ClaimMailboxView(viewmodel: .preview())
+        ClaimMailboxView(viewmodel: .preview(), loadsOnAppear: false)
     }
 }
 
@@ -219,6 +227,6 @@ extension ClaimMailboxView {
             postOffices: PreviewData.postOffices,
             selectedPostOffice: PreviewData.mainStreetPostOffice,
             hasLoadedPostOffices: true
-        ))
+        ), loadsOnAppear: false)
     }
 }

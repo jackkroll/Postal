@@ -1,6 +1,8 @@
 import FirebaseCore
 import SwiftUI
 import UIKit
+import UserNotifications
+import RevenueCat
 
 class AppDelegate: NSObject, UIApplicationDelegate {
   func application(_ application: UIApplication,
@@ -15,9 +17,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
   }
 
   func applicationDidBecomeActive(_ application: UIApplication) {
+    clearAppIconBadge()
     Task { @MainActor in
       await AppServices.pushNotifications.registerIfAuthorized()
     }
+  }
+
+  private func clearAppIconBadge() {
+    UNUserNotificationCenter.current().setBadgeCount(0)
   }
 
   func application(
@@ -63,6 +70,7 @@ struct PostalApp: App {
 
     init() {
         AppServices.api.setTokenProvider(AppServices.auth)
+        Purchases.configure(withAPIKey: "test_rRnDkBOcujFwHzjaENBwopVBScN")
     }
 
     var body: some Scene {

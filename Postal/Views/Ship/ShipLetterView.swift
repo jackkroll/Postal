@@ -3,9 +3,14 @@ import SwiftUI
 struct ShipLetterView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewmodel: ViewModel
+    private let loadsOnAppear: Bool
 
-    init(viewmodel: ViewModel = ViewModel(api: AppServices.api)) {
+    init(
+        viewmodel: ViewModel = ViewModel(api: AppServices.api),
+        loadsOnAppear: Bool = true
+    ) {
         _viewmodel = State(initialValue: viewmodel)
+        self.loadsOnAppear = loadsOnAppear
     }
 
     var body: some View {
@@ -86,6 +91,7 @@ struct ShipLetterView: View {
         .navigationTitle("Ship Letter")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard loadsOnAppear else { return }
             await viewmodel.loadMailboxes()
         }
         .sheet(isPresented: $viewmodel.isDestinationPickerPresented) {
@@ -149,7 +155,7 @@ extension ShipLetterView {
 
 #Preview("Empty") {
     NavigationStack {
-        ShipLetterView(viewmodel: .preview())
+        ShipLetterView(viewmodel: .preview(), loadsOnAppear: false)
     }
 }
 
@@ -160,12 +166,12 @@ extension ShipLetterView {
             selectedOriginMailbox: PreviewData.ownedMailboxes[0],
             selectedDestinationMailbox: PreviewData.destinationMailboxes[1],
             letterText: PreviewData.sampleLetterText
-        ))
+        ), loadsOnAppear: false)
     }
 }
 
 #Preview("No Mailboxes") {
     NavigationStack {
-        ShipLetterView(viewmodel: .preview(ownedMailboxes: []))
+        ShipLetterView(viewmodel: .preview(ownedMailboxes: []), loadsOnAppear: false)
     }
 }

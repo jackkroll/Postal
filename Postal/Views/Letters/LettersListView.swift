@@ -326,28 +326,14 @@ private struct LetterRowView: View {
                 HStack(spacing: 6) {
                     Text(letter.status.displayTitle)
                         .foregroundStyle(letter.status.tintColor)
-
                     if let updated = letter.updatedAt ?? letter.createdAt {
                         Text("·")
                             .foregroundStyle(.tertiary)
                         Text(updated, format: .relative(presentation: .named, unitsStyle: .abbreviated))
                             .foregroundStyle(.secondary)
                     }
-
-                    if letter.hasLetter, let format = letter.letterFormat {
-                        Text("·")
-                            .foregroundStyle(.tertiary)
-                        Text(format.displayTitle)
-                            .foregroundStyle(.tertiary)
-                    }
                 }
                 .font(.caption)
-
-                Text(letter.trackingNumber)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
             }
         }
         .contextMenu {

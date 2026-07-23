@@ -26,6 +26,9 @@ protocol PushNotificationsProviding: AnyObject {
     var appInstanceID: String { get }
     func refreshAuthorizationStatus() async
     func registerIfAuthorized() async
+    /// Returns an APNs token when permission is already granted and the user has not opted out.
+    /// Does not prompt for permission. Returns `nil` when registration should be skipped.
+    func deviceTokenIfAuthorized() async throws -> String?
     func requestAuthorizationAndToken() async throws -> String
     func handleDeviceToken(_ deviceToken: Data)
     func handleRegistrationFailure(_ error: Error)
@@ -86,6 +89,30 @@ final class PushNotificationService: NSObject, PushNotificationsProviding {
         default:
             break
         }
+    }
+
+    func deviceTokenIfAuthorized() async throws -> String? {
+        await refreshAuthorizationStatus()
+        guard !userOptedOut else { return nil }
+        switch authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            break
+        default:
+            return nil
+        }
+
+        if let existing = currentDeviceToken {
+            return existing
+        }
+
+        lastRegistrationError = nil
+        UIApplication.shared.registerForRemoteNotifications()
+
+        if let existing = currentDeviceToken {
+            return existing
+        }
+
+        return try await waitForDeviceToken(timeoutSeconds: 30)
     }
 
     func requestAuthorizationAndToken() async throws -> String {

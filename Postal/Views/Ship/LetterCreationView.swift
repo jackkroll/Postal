@@ -43,9 +43,14 @@ struct LetterCreationView: View {
     @State private var viewmodel: ViewModel
     @State private var pendingClaimBoxNavigation = false
     @FocusState private var isComposerFocused: Bool
+    private let loadsOnAppear: Bool
 
-    init(viewmodel: ViewModel = ViewModel(api: AppServices.api)) {
+    init(
+        viewmodel: ViewModel = ViewModel(api: AppServices.api),
+        loadsOnAppear: Bool = true
+    ) {
         _viewmodel = State(initialValue: viewmodel)
+        self.loadsOnAppear = loadsOnAppear
     }
 
     var body: some View {
@@ -79,6 +84,7 @@ struct LetterCreationView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard loadsOnAppear else { return }
             await viewmodel.loadMailboxes()
             await viewmodel.beginGuidedFlow()
         }
@@ -1226,14 +1232,14 @@ extension LetterCreationView {
 
 #Preview("Overview → Destination") {
     NavigationStack {
-        LetterCreationView(viewmodel: .preview(phase: .destination))
+        LetterCreationView(viewmodel: .preview(phase: .destination), loadsOnAppear: false)
     }
     .environment(Router())
 }
 
 #Preview("Letter Style") {
     NavigationStack {
-        LetterCreationView(viewmodel: .preview(phase: .letterType))
+        LetterCreationView(viewmodel: .preview(phase: .letterType), loadsOnAppear: false)
     }
     .environment(Router())
 }
@@ -1246,7 +1252,7 @@ extension LetterCreationView {
             selectedDestinationMailbox: PreviewData.destinationMailboxes[1],
             letterText: PreviewData.sampleLetterText,
             composeKind: .text
-        ))
+        ), loadsOnAppear: false)
     }
     .environment(Router())
 }
@@ -1259,7 +1265,7 @@ extension LetterCreationView {
             selectedDestinationMailbox: PreviewData.destinationMailboxes[1],
             letterText: PreviewData.sampleLetterText,
             composeKind: .text
-        ))
+        ), loadsOnAppear: false)
     }
     .environment(Router())
 }
@@ -1269,7 +1275,7 @@ extension LetterCreationView {
         LetterCreationView(viewmodel: .preview(
             phase: .returnAddress,
             ownedMailboxes: []
-        ))
+        ), loadsOnAppear: false)
     }
     .environment(Router())
 }

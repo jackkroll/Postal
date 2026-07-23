@@ -6,6 +6,12 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State var viewmodel: ViewModel
     @State private var isDeleteAccountPresented = false
+    private let loadsOnAppear: Bool
+
+    init(viewmodel: ViewModel, loadsOnAppear: Bool = true) {
+        _viewmodel = State(initialValue: viewmodel)
+        self.loadsOnAppear = loadsOnAppear
+    }
 
     var body: some View {
         Form {
@@ -136,6 +142,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard loadsOnAppear else { return }
             await viewmodel.refresh()
         }
         .sheet(isPresented: $isDeleteAccountPresented) {
@@ -462,6 +469,6 @@ extension SettingsView {
 
 #Preview {
     NavigationStack {
-        SettingsView(viewmodel: .preview())
+        SettingsView(viewmodel: .preview(), loadsOnAppear: false)
     }
 }
