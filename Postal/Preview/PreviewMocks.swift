@@ -35,11 +35,13 @@ final class PreviewAuthService: AuthProviding {
 extension LettersListView.ViewModel {
     static func preview(
         letters: [LetterSummary] = PreviewData.letters,
-        inboundLetters: [InboundLetterItem] = []
+        inboundLetters: [InboundLetterItem] = [],
+        drafts: [LetterDraft] = []
     ) -> LettersListView.ViewModel {
         let viewModel = LettersListView.ViewModel(api: APIClient())
         viewModel.letters = letters
         viewModel.inboundLetters = inboundLetters
+        viewModel.drafts = drafts
         viewModel.mailboxesByID = Dictionary(
             uniqueKeysWithValues: PreviewData.allMailboxes.map { ($0.id, $0) }
         )
@@ -204,10 +206,12 @@ extension SettingsView.ViewModel {
 
 extension AddressBook.ViewModel {
     static func preview(
-        addresses: [AddressBookEntrySummary] = PreviewData.addressBookEntries
+        addresses: [AddressBookEntrySummary] = PreviewData.addressBookEntries,
+        ownedMailboxes: [MailboxSummary] = PreviewData.ownedMailboxes
     ) -> AddressBook.ViewModel {
         let viewModel = AddressBook.ViewModel(api: APIClient())
         viewModel.addresses = addresses
+        viewModel.ownedMailboxes = ownedMailboxes
         return viewModel
     }
 }

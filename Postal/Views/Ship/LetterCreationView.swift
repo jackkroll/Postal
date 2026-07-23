@@ -1,6 +1,7 @@
+import PencilKit
 import SwiftUI
 
-enum LetterCreationPhase: Equatable {
+enum LetterCreationPhase: String, Codable, Equatable {
     case overview
     case destination
     case returnAddress
@@ -11,7 +12,7 @@ enum LetterCreationPhase: Equatable {
     case sent
 }
 
-enum LetterComposeKind: Equatable {
+enum LetterComposeKind: String, Codable, Equatable {
     case text
     case drawing
 }
@@ -37,6 +38,7 @@ enum LetterSheetPlacement: Equatable {
 
 struct LetterCreationView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(Router.self) private var router: Router?
     @State private var viewmodel: ViewModel
     @State private var pendingClaimBoxNavigation = false
@@ -83,6 +85,15 @@ struct LetterCreationView: View {
         .onChange(of: viewmodel.phase) { _, newPhase in
             isComposerFocused = newPhase == .compose
             viewmodel.refreshCamera(animated: true)
+            viewmodel.scheduleAutosave()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background || phase == .inactive {
+                viewmodel.saveDraftNow()
+            }
+        }
+        .onDisappear {
+            viewmodel.saveDraftNow()
         }
         .sheet(isPresented: $viewmodel.isDestinationPickerPresented) {
             DestinationMailboxPickerSheet(api: viewmodel.api) { mailbox in
@@ -106,9 +117,16 @@ struct LetterCreationView: View {
             )
         }
         .navigationDestination(isPresented: $viewmodel.isDrawingComposerPresented) {
-            CanvasView(initialDrawingData: viewmodel.drawingData) { data in
-                viewmodel.finishDrawing(data)
-            }
+            CanvasView(
+                initialDrawingData: viewmodel.drawingData,
+                draftSaveStatus: viewmodel.draftSaveStatus,
+                onDrawingChange: { data in
+                    viewmodel.updateInProgressDrawing(data)
+                },
+                onContinue: { data in
+                    viewmodel.finishDrawing(data)
+                }
+            )
         }
         .onChange(of: viewmodel.isDrawingComposerPresented) { _, isPresented in
             if !isPresented {
@@ -171,10 +189,16 @@ private struct LetterCreationCaption: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if viewmodel.phase == .compose, viewmodel.draftSaveStatus != .hidden {
+                DraftSaveStatusLabel(status: viewmodel.draftSaveStatus)
+                    .padding(.top, 2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: 44, alignment: .center)
         .animation(LetterCreationMotion.soft, value: viewmodel.phase)
+        .animation(LetterCreationMotion.soft, value: viewmodel.draftSaveStatus)
     }
 }
 
@@ -306,6 +330,7 @@ private struct LetterSheetHost: View {
         )
         .onChange(of: viewmodel.letterText) { _, newValue in
             viewmodel.recomputeLetterMetrics(from: newValue)
+            viewmodel.scheduleDebouncedAutosave()
         }
     }
 }
@@ -510,6 +535,8 @@ extension LetterCreationView {
         }()
 
         let api: APIClient
+        let drafts: DraftLetterStoring
+        let draftID: UUID
 
         var phase: LetterCreationPhase = .overview
         var camera: LetterCamera = .identity
@@ -532,6 +559,7 @@ extension LetterCreationView {
         var composeKind: LetterComposeKind?
         var drawingData: Data?
         var isDrawingComposerPresented = false
+        var draftSaveStatus: DraftSaveStatus = .hidden
 
         var isStampApplied = false
         var isSending = false
@@ -545,18 +573,153 @@ extension LetterCreationView {
 
         private var suppressCameraRefresh = false
         private var transitionTask: Task<Void, Never>?
+        private var autosaveTask: Task<Void, Never>?
+        private var isResumingDraft = false
+        private var draftDeleted = false
+        private var hasPersistedDraft = false
 
         init(
             api: APIClient,
+            drafts: DraftLetterStoring = AppServices.letterDrafts,
             origin: MailboxSummary? = nil,
-            destination: MailboxSummary? = nil
+            destination: MailboxSummary? = nil,
+            draftID: UUID? = nil
         ) {
             self.api = api
-            if let origin {
-                ownedMailboxes = [origin]
-                selectedOriginMailboxID = origin.id
+            self.drafts = drafts
+            if let draftID, let draft = drafts.load(id: draftID) {
+                self.draftID = draft.id
+                isResumingDraft = true
+                hasPersistedDraft = true
+                draftSaveStatus = .saved
+                phase = Self.clampedPhase(draft.phase, composeKind: draft.composeKind)
+                composeKind = draft.composeKind
+                selectedOriginMailboxID = draft.originMailboxID
+                selectedDestinationMailbox = draft.destination
+                letterText = draft.letterText
+                letterByteCount = draft.letterText.utf8.count
+                letterIsBlank = draft.letterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if draft.hasDrawing {
+                    drawingData = drafts.loadDrawingData(id: draft.id)
+                }
+                letterPlacement = phase == .compose ? .revealed : .tucked
+            } else {
+                self.draftID = draftID ?? UUID()
+                if let origin {
+                    ownedMailboxes = [origin]
+                    selectedOriginMailboxID = origin.id
+                }
+                selectedDestinationMailbox = destination
             }
-            selectedDestinationMailbox = destination
+        }
+
+        private static func clampedPhase(
+            _ phase: LetterCreationPhase,
+            composeKind: LetterComposeKind?
+        ) -> LetterCreationPhase {
+            switch phase {
+            case .sending, .sent:
+                return .stamp
+            case .overview:
+                switch composeKind {
+                case .drawing:
+                    return .stamp
+                case .text:
+                    return .compose
+                case nil:
+                    return .destination
+                }
+            default:
+                return phase
+            }
+        }
+
+        /// Destination, content, or compose choice — not origin alone (avoids empty drafts from auto-selected From).
+        private var shouldPersistDraft: Bool {
+            selectedDestinationMailbox != nil
+                || composeKind != nil
+                || !letterIsBlank
+                || !(drawingData?.isEmpty ?? true)
+        }
+
+        func scheduleDebouncedAutosave() {
+            guard !draftDeleted, shouldPersistDraft || hasPersistedDraft else { return }
+            markDraftSaving()
+            autosaveTask?.cancel()
+            autosaveTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                guard !Task.isCancelled else { return }
+                saveDraftNow()
+            }
+        }
+
+        func scheduleAutosave() {
+            guard !draftDeleted, shouldPersistDraft || hasPersistedDraft else { return }
+            markDraftSaving()
+            autosaveTask?.cancel()
+            autosaveTask = Task { @MainActor in
+                saveDraftNow()
+            }
+        }
+
+        func saveDraftNow() {
+            guard !draftDeleted else { return }
+            guard shouldPersistDraft || hasPersistedDraft else {
+                draftSaveStatus = .hidden
+                return
+            }
+            let persistedPhase: LetterCreationPhase
+            switch phase {
+            case .sending, .sent, .overview:
+                persistedPhase = Self.clampedPhase(phase, composeKind: composeKind)
+            default:
+                persistedPhase = phase
+            }
+            let draft = LetterDraft(
+                id: draftID,
+                updatedAt: .now,
+                phase: persistedPhase,
+                composeKind: composeKind,
+                originMailboxID: selectedOriginMailboxID,
+                destination: selectedDestinationMailbox,
+                letterText: letterText,
+                hasDrawing: !(drawingData?.isEmpty ?? true)
+            )
+            drafts.save(draft, drawingData: drawingData)
+            hasPersistedDraft = true
+            markDraftSaved()
+        }
+
+        func deleteDraft() {
+            draftDeleted = true
+            autosaveTask?.cancel()
+            draftSaveStatus = .hidden
+            drafts.delete(id: draftID)
+        }
+
+        /// Persist strokes while the drawing composer is open.
+        @MainActor
+        func updateInProgressDrawing(_ data: Data) {
+            let isEmpty = data.isEmpty || ((try? PKDrawing(data: data))?.strokes.isEmpty ?? true)
+            drawingData = isEmpty ? nil : data
+            if !isEmpty {
+                composeKind = .drawing
+            } else if isDrawingComposerPresented {
+                // Keep draw mode while the canvas is open so an empty clear still autosaves state.
+                composeKind = .drawing
+            }
+            scheduleDebouncedAutosave()
+        }
+
+        private func markDraftSaving() {
+            guard shouldPersistDraft || hasPersistedDraft else { return }
+            if draftSaveStatus != .saving {
+                draftSaveStatus = .saving
+            }
+        }
+
+        private func markDraftSaved() {
+            draftSaveStatus = .saved
         }
 
         var selectedOriginMailbox: MailboxSummary? {
@@ -710,8 +873,17 @@ extension LetterCreationView {
         func beginGuidedFlow() async {
             withAnimation(LetterCreationMotion.envelope) {
                 envelopeVisible = true
-                letterPlacement = .tucked
+                letterPlacement = phase == .compose ? .revealed : .tucked
             }
+
+            if isResumingDraft {
+                isResumingDraft = false
+                try? await Task.sleep(for: .milliseconds(320))
+                guard !Task.isCancelled else { return }
+                refreshCamera(animated: true)
+                return
+            }
+
             try? await Task.sleep(for: .milliseconds(520))
             guard !Task.isCancelled, phase == .overview else { return }
 
@@ -729,6 +901,7 @@ extension LetterCreationView {
         func selectDestination(_ mailbox: MailboxSummary) {
             selectedDestinationMailbox = mailbox
             isDestinationPickerPresented = false
+            scheduleAutosave()
             Task { @MainActor in
                 // Wait for sheet dismiss + address layout before reframing.
                 try? await Task.sleep(for: .milliseconds(320))
@@ -740,6 +913,7 @@ extension LetterCreationView {
         func selectOrigin(_ mailbox: MailboxSummary) {
             selectedOriginMailboxID = mailbox.id
             isOriginPickerPresented = false
+            scheduleAutosave()
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(320))
                 guard !Task.isCancelled, phase == .returnAddress else { return }
@@ -783,6 +957,7 @@ extension LetterCreationView {
                 await transition(to: .destination, zoomOutFirst: true)
             case .letterType:
                 composeKind = nil
+                scheduleAutosave()
                 await transition(to: .returnAddress, zoomOutFirst: true)
             case .compose:
                 await transition(to: .letterType, zoomOutFirst: true)
@@ -808,6 +983,7 @@ extension LetterCreationView {
             switch kind {
             case .text:
                 drawingData = nil
+                scheduleAutosave()
                 transitionTask?.cancel()
                 transitionTask = Task { @MainActor in
                     await transition(to: .compose, zoomOutFirst: true)
@@ -815,6 +991,7 @@ extension LetterCreationView {
             case .drawing:
                 letterText = ""
                 recomputeLetterMetrics(from: "")
+                scheduleAutosave()
                 isDrawingComposerPresented = true
             }
         }
@@ -824,6 +1001,7 @@ extension LetterCreationView {
             drawingData = data
             composeKind = .drawing
             isDrawingComposerPresented = false
+            scheduleAutosave()
             transitionTask?.cancel()
             transitionTask = Task { @MainActor in
                 await transition(to: .stamp, zoomOutFirst: false)
@@ -836,6 +1014,7 @@ extension LetterCreationView {
             guard phase == .letterType || phase == .stamp else { return }
             if drawingData == nil {
                 composeKind = nil
+                scheduleAutosave()
             }
         }
 
@@ -966,6 +1145,7 @@ extension LetterCreationView {
                 }
 
                 createdTrackingNumber = response.trackingNumber
+                deleteDraft()
                 phase = .sent
                 withAnimation(LetterCreationMotion.envelope) {
                     camera = .identity

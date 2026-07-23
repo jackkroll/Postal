@@ -53,11 +53,13 @@ import Observation
             ))
         case .landing:
             LettersListView()
-        case let .ship(origin, destination):
+        case let .ship(origin, destination, draftID):
             LetterCreationView(viewmodel: .init(
                 api: AppServices.api,
+                drafts: AppServices.letterDrafts,
                 origin: origin,
-                destination: destination
+                destination: destination,
+                draftID: draftID
             ))
         case .claimBox:
             ClaimMailboxView()
@@ -90,8 +92,13 @@ enum ViewRoute: Hashable {
     case settings
     case track(trackingNum: String?, letter: LetterSummary? = nil, isRecipient: Bool = false)
     case read(shipmentID: String, metadata: LetterMetadata, service: LetterContentProviding)
-    /// Opens letter creation, optionally prefilling return (`origin`) and destination mailboxes.
-    case ship(origin: MailboxSummary? = nil, destination: MailboxSummary? = nil)
+    /// Opens letter creation, optionally prefilling return (`origin`) and destination mailboxes,
+    /// or resuming a local draft via `draftID`.
+    case ship(
+        origin: MailboxSummary? = nil,
+        destination: MailboxSummary? = nil,
+        draftID: UUID? = nil
+    )
     case compose(source: MailboxSummary, destination: MailboxSummary)
     case addressbook
 
@@ -103,8 +110,8 @@ enum ViewRoute: Hashable {
              (.settings, .settings),
              (.addressbook, .addressbook):
             return true
-        case let (.ship(lo, ld), .ship(ro, rd)):
-            return lo?.id == ro?.id && ld?.id == rd?.id
+        case let (.ship(lo, ld, lid), .ship(ro, rd, rid)):
+            return lo?.id == ro?.id && ld?.id == rd?.id && lid == rid
         case let (.track(lt, ll, lr), .track(rt, rl, rr)):
             return lt == rt
                 && ((ll == nil && rl == nil) || (ll?.id == rl?.id))
@@ -139,10 +146,11 @@ enum ViewRoute: Hashable {
             hasher.combine(metadata.byteSize)
             hasher.combine(metadata.filename)
             hasher.combine(metadata.format)
-        case let .ship(origin, destination):
+        case let .ship(origin, destination, draftID):
             hasher.combine(6)
             hasher.combine(origin?.id)
             hasher.combine(destination?.id)
+            hasher.combine(draftID)
         case let .compose(source, destination):
             hasher.combine(7)
             hasher.combine(source.id)

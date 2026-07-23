@@ -68,6 +68,7 @@ struct LettersListView: View {
                 switch tab {
                 case .sent:
                     await viewmodel.loadSentLetters()
+                    viewmodel.loadDrafts()
                 case .inbound:
                     await viewmodel.loadInboundLetters()
                 }
@@ -75,6 +76,7 @@ struct LettersListView: View {
         }
         .task {
             guard loadsOnAppear else { return }
+            viewmodel.loadDrafts()
             await viewmodel.loadSentLetters()
             if showInboundLetters, selectedTab == .inbound {
                 await viewmodel.loadInboundLetters()
@@ -85,6 +87,9 @@ struct LettersListView: View {
             if showInboundLetters, selectedTab == .inbound {
                 await viewmodel.loadInboundLetters()
             }
+        }
+        .onAppear {
+            viewmodel.loadDrafts()
         }
     }
 
@@ -113,10 +118,10 @@ struct LettersListView: View {
 
     @ViewBuilder
     private var sentContent: some View {
-        if viewmodel.isLoadingSent, viewmodel.letters.isEmpty {
+        if viewmodel.isLoadingSent, viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
             ProgressView("Loading letters…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = viewmodel.sentErrorMessage, viewmodel.letters.isEmpty {
+        } else if let errorMessage = viewmodel.sentErrorMessage, viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
             ContentUnavailableView {
                 Label("Couldn't Load Letters", systemImage: "exclamationmark.triangle")
             } description: {
@@ -127,7 +132,7 @@ struct LettersListView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
-        } else if viewmodel.letters.isEmpty {
+        } else if viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
             ContentUnavailableView {
                 Label("No Letters Yet", systemImage: "envelope.open")
             } description: {
@@ -137,16 +142,50 @@ struct LettersListView: View {
                     .buttonStyle(.borderedProminent)
             }
         } else {
-            List(viewmodel.letters) { letter in
-                NavigationLink(value: ViewRoute.track(trackingNum: letter.trackingNumber, letter: letter)) {
-                    LetterRowView(
-                        letter: letter,
-                        origin: viewmodel.resolved(letter.origin),
-                        destination: viewmodel.resolved(letter.destination)
-                    )
+            List {
+                if !viewmodel.drafts.isEmpty {
+                    Section("Drafts") {
+                        ForEach(viewmodel.drafts) { draft in
+                            NavigationLink(value: ViewRoute.ship(draftID: draft.id)) {
+                                DraftLetterRowView(draft: draft)
+                            }
+                        }
+                        .onDelete { indexSet in
+                            viewmodel.deleteDrafts(at: indexSet)
+                        }
+                    }
+
+                    Section("Sent") {
+                        if viewmodel.letters.isEmpty {
+                            Text("No sent letters yet.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(viewmodel.letters) { letter in
+                                NavigationLink(value: ViewRoute.track(trackingNum: letter.trackingNumber, letter: letter)) {
+                                    LetterRowView(
+                                        letter: letter,
+                                        origin: viewmodel.resolved(letter.origin),
+                                        destination: viewmodel.resolved(letter.destination)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(viewmodel.letters) { letter in
+                        NavigationLink(value: ViewRoute.track(trackingNum: letter.trackingNumber, letter: letter)) {
+                            LetterRowView(
+                                letter: letter,
+                                origin: viewmodel.resolved(letter.origin),
+                                destination: viewmodel.resolved(letter.destination)
+                            )
+                        }
+                    }
                 }
             }
             .refreshable {
+                viewmodel.loadDrafts()
                 await viewmodel.loadSentLetters()
             }
             .overlay(alignment: .top) {
@@ -202,6 +241,54 @@ struct LettersListView: View {
                 }
             }
         }
+    }
+}
+
+private struct DraftLetterRowView: View {
+    let draft: LetterDraft
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "doc.text")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 40, maxHeight: 40)
+                .background(Color.secondary.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(draft.destinationTitle)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                if let locationName = draft.destination?.locationLabel {
+                    Text(locationName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 6) {
+                    Text("Draft")
+                        .foregroundStyle(.orange)
+
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+
+                    Text(draft.updatedAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                        .foregroundStyle(.secondary)
+
+                    if let formatHint = draft.formatHint {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(formatHint)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.caption)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -340,7 +427,9 @@ extension LettersListView {
     @Observable
     class ViewModel {
         var api: APIClient
+        var draftsStore: DraftLetterStoring
         var letters: [LetterSummary] = []
+        var drafts: [LetterDraft] = []
         var inboundLetters: [InboundLetterItem] = []
         var isLoadingSent = false
         var isLoadingInbound = false
@@ -353,8 +442,21 @@ extension LettersListView {
         private var sentLoadTask: Task<Void, Never>?
         private var inboundLoadTask: Task<Void, Never>?
 
-        init(api: APIClient) {
+        init(api: APIClient, draftsStore: DraftLetterStoring = AppServices.letterDrafts) {
             self.api = api
+            self.draftsStore = draftsStore
+        }
+
+        func loadDrafts() {
+            drafts = draftsStore.list()
+        }
+
+        func deleteDrafts(at offsets: IndexSet) {
+            for index in offsets {
+                guard drafts.indices.contains(index) else { continue }
+                draftsStore.delete(id: drafts[index].id)
+            }
+            loadDrafts()
         }
 
         @MainActor

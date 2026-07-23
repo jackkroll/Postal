@@ -10,26 +10,44 @@ import PencilKit
 
 struct CanvasView: View {
     let initialDrawingData: Data?
+    let draftSaveStatus: DraftSaveStatus
+    let onDrawingChange: (Data) -> Void
     let onContinue: (Data) -> Void
 
+    @Environment(\.scenePhase) private var scenePhase
     @State private var canvas = PKCanvasView()
     @State private var toolPicker = PKToolPicker()
     @State private var isDrawingEmpty = true
     @State private var isToolPickerVisible = true
     @State private var didRestoreInitialDrawing = false
+    @State private var changeNotifyTask: Task<Void, Never>?
 
-    init(initialDrawingData: Data? = nil, onContinue: @escaping (Data) -> Void) {
+    init(
+        initialDrawingData: Data? = nil,
+        draftSaveStatus: DraftSaveStatus = .hidden,
+        onDrawingChange: @escaping (Data) -> Void = { _ in },
+        onContinue: @escaping (Data) -> Void
+    ) {
         self.initialDrawingData = initialDrawingData
+        self.draftSaveStatus = draftSaveStatus
+        self.onDrawingChange = onDrawingChange
         self.onContinue = onContinue
     }
 
     var body: some View {
-        CanvasUIView(
-            canvasView: $canvas,
-            toolPicker: $toolPicker,
-            isDrawingEmpty: $isDrawingEmpty
-        )
-        .background(Color(.systemBackground))
+        VStack(spacing: 0) {
+            if draftSaveStatus != .hidden {
+                DraftSaveStatusLabel(status: draftSaveStatus)
+            }
+
+            CanvasUIView(
+                canvasView: $canvas,
+                toolPicker: $toolPicker,
+                isDrawingEmpty: $isDrawingEmpty,
+                onDrawingChange: scheduleDrawingChangeNotification
+            )
+            .background(Color(.systemBackground))
+        }
         .navigationTitle("Draw Letter")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -46,8 +64,9 @@ struct CanvasView: View {
                 Button {
                     canvas.drawing = PKDrawing()
                     isDrawingEmpty = true
+                    notifyDrawingChange(immediate: true)
                 } label: {
-                    Label("Clear", systemImage: "trashcan.fill")
+                    Label("Clear", systemImage: "trash.fill")
                         .labelStyle(.iconOnly)
                 }
                 .disabled(isDrawingEmpty)
@@ -57,6 +76,7 @@ struct CanvasView: View {
             }
             ToolbarItem(placement: .bottomBar) {
                 Button {
+                    notifyDrawingChange(immediate: true)
                     onContinue(canvas.drawing.dataRepresentation())
                 } label: {
                     Label("Continue", systemImage: "chevron.forward")
@@ -71,6 +91,14 @@ struct CanvasView: View {
             isToolPickerVisible = true
             canvas.becomeFirstResponder()
         }
+        .onDisappear {
+            notifyDrawingChange(immediate: true)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background || phase == .inactive {
+                notifyDrawingChange(immediate: true)
+            }
+        }
     }
 
     private func restoreInitialDrawingIfNeeded() {
@@ -82,15 +110,32 @@ struct CanvasView: View {
         canvas.drawing = drawing
         isDrawingEmpty = drawing.strokes.isEmpty
     }
+
+    private func scheduleDrawingChangeNotification() {
+        changeNotifyTask?.cancel()
+        changeNotifyTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            notifyDrawingChange(immediate: true)
+        }
+    }
+
+    private func notifyDrawingChange(immediate: Bool) {
+        if immediate {
+            changeNotifyTask?.cancel()
+        }
+        onDrawingChange(canvas.drawing.dataRepresentation())
+    }
 }
 
 struct CanvasUIView: UIViewRepresentable {
     @Binding var canvasView: PKCanvasView
     @Binding var toolPicker: PKToolPicker
     @Binding var isDrawingEmpty: Bool
+    var onDrawingChange: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isDrawingEmpty: $isDrawingEmpty)
+        Coordinator(isDrawingEmpty: $isDrawingEmpty, onDrawingChange: onDrawingChange)
     }
 
     func makeUIView(context: Context) -> PKCanvasView {
@@ -107,17 +152,21 @@ struct CanvasUIView: UIViewRepresentable {
 
     func updateUIView(_ canvasView: PKCanvasView, context: Context) {
         context.coordinator.isDrawingEmpty = $isDrawingEmpty
+        context.coordinator.onDrawingChange = onDrawingChange
     }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         var isDrawingEmpty: Binding<Bool>
+        var onDrawingChange: () -> Void
 
-        init(isDrawingEmpty: Binding<Bool>) {
+        init(isDrawingEmpty: Binding<Bool>, onDrawingChange: @escaping () -> Void) {
             self.isDrawingEmpty = isDrawingEmpty
+            self.onDrawingChange = onDrawingChange
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             syncEmptyState(from: canvasView)
+            onDrawingChange()
         }
 
         func syncEmptyState(from canvasView: PKCanvasView) {
@@ -131,6 +180,6 @@ struct CanvasUIView: UIViewRepresentable {
 
 #Preview {
     NavigationStack {
-        CanvasView { _ in }
+        CanvasView(draftSaveStatus: .saved) { _ in }
     }
 }
