@@ -4,10 +4,16 @@ enum LetterCreationPhase: Equatable {
     case overview
     case destination
     case returnAddress
+    case letterType
     case compose
     case stamp
     case sending
     case sent
+}
+
+enum LetterComposeKind: Equatable {
+    case text
+    case drawing
 }
 
 struct LetterCamera: Equatable {
@@ -98,6 +104,16 @@ struct LetterCreationView: View {
                     viewmodel.isOriginPickerPresented = false
                 }
             )
+        }
+        .navigationDestination(isPresented: $viewmodel.isDrawingComposerPresented) {
+            CanvasView(initialDrawingData: viewmodel.drawingData) { data in
+                viewmodel.finishDrawing(data)
+            }
+        }
+        .onChange(of: viewmodel.isDrawingComposerPresented) { _, isPresented in
+            if !isPresented {
+                viewmodel.handleDrawingComposerDismissed()
+            }
         }
         .alert("Letter Sent", isPresented: $viewmodel.showSuccess) {
             Button("Done") { dismiss() }
@@ -283,6 +299,7 @@ private struct LetterSheetHost: View {
         LetterSheetView(
             isComposing: isComposing,
             letterText: viewmodel.letterText,
+            drawingAttached: viewmodel.composeKind == .drawing && viewmodel.drawingData != nil,
             isHighlighted: viewmodel.highlightedRegion == .body,
             letterTextBinding: $viewmodel.letterText,
             isComposerFocused: $isComposerFocused
@@ -303,40 +320,61 @@ private struct LetterCreationChrome: View {
         switch viewmodel.phase {
         case .compose:
             HStack(spacing: 12) {
-                /*
-                Text(viewmodel.byteCountLabel)
-                    .font(.caption)
-                    .foregroundStyle(viewmodel.isOverByteLimit ? .red : .secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                */
                 if viewmodel.canGoBack {
-                    Button{
+                    Button {
                         isComposerFocused = false
                         viewmodel.enqueueBack()
                     } label: {
                         Label("Back", systemImage: "chevron.backward")
-                            
                     }
                     .buttonStyle(.bordered)
                 }
                 Spacer()
                 if viewmodel.canAdvance {
-                    Button{
+                    Button {
                         isComposerFocused = false
                         viewmodel.enqueueForward()
                     } label: {
                         Label("Continue", systemImage: "chevron.forward")
                             .labelStyle(SwappedLabelStyle())
-                            
                     }
                     .buttonStyle(.borderedProminent)
-                    
                 } else {
                     Text(viewmodel.letterIsBlank ? "Write something to continue" : " ")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .lineLimit(1)
+                }
+            }
+        case .letterType:
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Button {
+                        viewmodel.selectComposeKind(.text)
+                    } label: {
+                        Label("Write", systemImage: "square.and.pencil")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button {
+                        viewmodel.selectComposeKind(.drawing)
+                    } label: {
+                        Label("Draw", systemImage: "pencil.tip.crop.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                if viewmodel.canGoBack {
+                    Button {
+                        viewmodel.enqueueBack()
+                    } label: {
+                        Label("Back", systemImage: "chevron.backward")
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         case .stamp:
@@ -491,6 +529,10 @@ extension LetterCreationView {
         private(set) var letterByteCount = 0
         private(set) var letterIsBlank = true
 
+        var composeKind: LetterComposeKind?
+        var drawingData: Data?
+        var isDrawingComposerPresented = false
+
         var isStampApplied = false
         var isSending = false
         var sendErrorMessage: String?
@@ -504,8 +546,17 @@ extension LetterCreationView {
         private var suppressCameraRefresh = false
         private var transitionTask: Task<Void, Never>?
 
-        init(api: APIClient) {
+        init(
+            api: APIClient,
+            origin: MailboxSummary? = nil,
+            destination: MailboxSummary? = nil
+        ) {
             self.api = api
+            if let origin {
+                ownedMailboxes = [origin]
+                selectedOriginMailboxID = origin.id
+            }
+            selectedDestinationMailbox = destination
         }
 
         var selectedOriginMailbox: MailboxSummary? {
@@ -518,11 +569,20 @@ extension LetterCreationView {
         }
 
         var canSend: Bool {
-            selectedOriginMailbox != nil
-                && selectedDestinationMailbox != nil
-                && !letterIsBlank
-                && !isOverByteLimit
-                && !isSending
+            guard selectedOriginMailbox != nil,
+                  selectedDestinationMailbox != nil,
+                  !isSending
+            else { return false }
+
+            switch composeKind {
+            case .text:
+                return !letterIsBlank && !isOverByteLimit
+            case .drawing:
+                guard let drawingData, !drawingData.isEmpty else { return false }
+                return drawingData.count <= Self.maxLetterBytes
+            case nil:
+                return false
+            }
         }
 
         var canAdvance: Bool {
@@ -540,7 +600,7 @@ extension LetterCreationView {
 
         var canGoBack: Bool {
             switch phase {
-            case .returnAddress, .compose, .stamp:
+            case .returnAddress, .letterType, .compose, .stamp:
                 return true
             default:
                 return false
@@ -568,6 +628,7 @@ extension LetterCreationView {
             case .overview: return "New Letter"
             case .destination: return "Destination"
             case .returnAddress: return "Return Address"
+            case .letterType: return "Letter Style"
             case .compose: return "Letter"
             case .stamp: return "Send"
             case .sending: return "Sending"
@@ -583,6 +644,8 @@ extension LetterCreationView {
                 return "Choose where this letter goes."
             case .returnAddress:
                 return "Choose which mailbox to send from."
+            case .letterType:
+                return "Write a letter or draw one."
             case .compose:
                 return "Write your letter, then continue."
             case .stamp:
@@ -651,7 +714,16 @@ extension LetterCreationView {
             }
             try? await Task.sleep(for: .milliseconds(520))
             guard !Task.isCancelled, phase == .overview else { return }
-            await transition(to: .destination, zoomOutFirst: false)
+
+            let nextPhase: LetterCreationPhase
+            if selectedDestinationMailbox != nil, selectedOriginMailbox != nil {
+                nextPhase = .letterType
+            } else if selectedDestinationMailbox != nil {
+                nextPhase = .returnAddress
+            } else {
+                nextPhase = .destination
+            }
+            await transition(to: nextPhase, zoomOutFirst: false)
         }
 
         func selectDestination(_ mailbox: MailboxSummary) {
@@ -695,7 +767,7 @@ extension LetterCreationView {
                 await transition(to: .returnAddress, zoomOutFirst: true)
             case .returnAddress:
                 guard selectedOriginMailbox != nil else { return }
-                await transition(to: .compose, zoomOutFirst: true)
+                await transition(to: .letterType, zoomOutFirst: true)
             case .compose:
                 guard canSend else { return }
                 await transition(to: .stamp, zoomOutFirst: true)
@@ -709,13 +781,61 @@ extension LetterCreationView {
             switch phase {
             case .returnAddress:
                 await transition(to: .destination, zoomOutFirst: true)
-            case .compose:
+            case .letterType:
+                composeKind = nil
                 await transition(to: .returnAddress, zoomOutFirst: true)
+            case .compose:
+                await transition(to: .letterType, zoomOutFirst: true)
             case .stamp:
                 isStampApplied = false
-                await transition(to: .compose, zoomOutFirst: true)
+                switch composeKind {
+                case .drawing:
+                    await transition(to: .letterType, zoomOutFirst: true)
+                    isDrawingComposerPresented = true
+                case .text:
+                    await transition(to: .compose, zoomOutFirst: true)
+                case nil:
+                    await transition(to: .letterType, zoomOutFirst: true)
+                }
             default:
                 break
+            }
+        }
+
+        @MainActor
+        func selectComposeKind(_ kind: LetterComposeKind) {
+            composeKind = kind
+            switch kind {
+            case .text:
+                drawingData = nil
+                transitionTask?.cancel()
+                transitionTask = Task { @MainActor in
+                    await transition(to: .compose, zoomOutFirst: true)
+                }
+            case .drawing:
+                letterText = ""
+                recomputeLetterMetrics(from: "")
+                isDrawingComposerPresented = true
+            }
+        }
+
+        @MainActor
+        func finishDrawing(_ data: Data) {
+            drawingData = data
+            composeKind = .drawing
+            isDrawingComposerPresented = false
+            transitionTask?.cancel()
+            transitionTask = Task { @MainActor in
+                await transition(to: .stamp, zoomOutFirst: false)
+            }
+        }
+
+        @MainActor
+        func handleDrawingComposerDismissed() {
+            // Popped without continuing — stay on type selection unless a drawing was saved.
+            guard phase == .letterType || phase == .stamp else { return }
+            if drawingData == nil {
+                composeKind = nil
             }
         }
 
@@ -790,7 +910,7 @@ extension LetterCreationView {
                 switch newPhase {
                 case .compose:
                     letterPlacement = .revealed
-                case .stamp, .sending, .destination, .returnAddress, .overview:
+                case .stamp, .sending, .destination, .returnAddress, .overview, .letterType:
                     letterPlacement = .tucked
                 case .sent:
                     break
@@ -817,14 +937,34 @@ extension LetterCreationView {
 
             sendErrorMessage = nil
 
-            let request = CreateShipmentRequest(
-                origin: origin,
-                destination: destination,
-                letter: .plain(letterText.trimmingCharacters(in: .whitespacesAndNewlines))
-            )
-
             do {
-                let response = try await api.createShipment(request)
+                let response: ShipmentCreateResponse
+                switch composeKind {
+                case .text:
+                    let request = CreateShipmentRequest(
+                        origin: origin,
+                        destination: destination,
+                        letter: .plain(letterText.trimmingCharacters(in: .whitespacesAndNewlines))
+                    )
+                    response = try await api.createShipment(request)
+                case .drawing:
+                    guard let drawingData, !drawingData.isEmpty else {
+                        isStampApplied = false
+                        phase = .stamp
+                        return
+                    }
+                    let request = CreateMultipartShipmentRequest(
+                        origin: origin,
+                        destination: destination,
+                        letter: .pkDrawing(drawingData)
+                    )
+                    response = try await api.createShipmentMultipart(request)
+                case nil:
+                    isStampApplied = false
+                    phase = .stamp
+                    return
+                }
+
                 createdTrackingNumber = response.trackingNumber
                 phase = .sent
                 withAnimation(LetterCreationMotion.envelope) {
@@ -855,7 +995,7 @@ extension LetterCreationView {
             let region: LetterCreationRegion?
             let padding: CGFloat
             switch phase {
-            case .overview, .sent:
+            case .overview, .sent, .letterType:
                 return .identity
             case .destination:
                 region = .destination
@@ -911,13 +1051,21 @@ extension LetterCreationView {
     .environment(Router())
 }
 
+#Preview("Letter Style") {
+    NavigationStack {
+        LetterCreationView(viewmodel: .preview(phase: .letterType))
+    }
+    .environment(Router())
+}
+
 #Preview("Compose") {
     NavigationStack {
         LetterCreationView(viewmodel: .preview(
             phase: .compose,
             selectedOriginMailbox: PreviewData.ownedMailboxes[0],
             selectedDestinationMailbox: PreviewData.destinationMailboxes[1],
-            letterText: PreviewData.sampleLetterText
+            letterText: PreviewData.sampleLetterText,
+            composeKind: .text
         ))
     }
     .environment(Router())
@@ -929,7 +1077,8 @@ extension LetterCreationView {
             phase: .stamp,
             selectedOriginMailbox: PreviewData.ownedMailboxes[0],
             selectedDestinationMailbox: PreviewData.destinationMailboxes[1],
-            letterText: PreviewData.sampleLetterText
+            letterText: PreviewData.sampleLetterText,
+            composeKind: .text
         ))
     }
     .environment(Router())

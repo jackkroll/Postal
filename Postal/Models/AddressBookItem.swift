@@ -66,4 +66,15 @@ struct AddressBookEntrySummary: Codable, Hashable, Identifiable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    var mailboxSummary: MailboxSummary {
+        MailboxSummary(
+            id: mailboxID,
+            postOfficeID: postOfficeID ?? mailboxID.postOfficeID,
+            postOfficeName: postOfficeName,
+            label: mailboxLabel ?? "Box \(mailboxID.code)",
+            ownerUserID: nil,
+            owned: false
+        )
+    }
 }

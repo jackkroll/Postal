@@ -225,6 +225,7 @@ struct ShippingEnvelopeView: View {
 struct LetterSheetView: View {
     let isComposing: Bool
     let letterText: String
+    var drawingAttached: Bool = false
     let isHighlighted: Bool
     @Binding var letterTextBinding: String
     @FocusState.Binding var isComposerFocused: Bool
@@ -282,6 +283,16 @@ struct LetterSheetView: View {
                             .allowsHitTesting(false)
                     }
                 }
+        } else if drawingAttached {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Drawing attached", systemImage: "pencil.tip.crop.circle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("Your handwritten letter is ready to send.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else if !letterText.isEmpty {
             ScrollView {
                 Text(letterText)

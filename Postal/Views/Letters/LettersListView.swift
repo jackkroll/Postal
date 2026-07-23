@@ -52,7 +52,7 @@ struct LettersListView: View {
                 ToolbarSpacer(.flexible, placement: .bottomBar)
             }
             ToolbarItem(placement: .bottomBar) {
-                NavigationLink(value: ViewRoute.ship) {
+                NavigationLink(value: ViewRoute.ship()) {
                     Label("Ship", systemImage: "square.and.pencil")
                 }
             }
@@ -133,7 +133,7 @@ struct LettersListView: View {
             } description: {
                 Text("Shipments you create will appear here.")
             } actions: {
-                NavigationLink("Ship a Letter", value: ViewRoute.ship)
+                NavigationLink("Ship a Letter", value: ViewRoute.ship())
                     .buttonStyle(.borderedProminent)
             }
         } else {
@@ -183,7 +183,11 @@ struct LettersListView: View {
         } else {
             List {
                 ForEach(viewmodel.inboundLetters) { letter in
-                    NavigationLink(value: ViewRoute.track(trackingNum: letter.trackingNumber, letter: nil)) {
+                    NavigationLink(value: ViewRoute.track(
+                        trackingNum: letter.trackingNumber,
+                        letter: letter.letterSummary,
+                        isRecipient: true
+                    )) {
                         InboundLetterRowView(letter: letter)
                     }
                 }

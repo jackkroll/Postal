@@ -3,6 +3,9 @@ import SwiftUI
 struct DestinationMailboxPickerSheet: View {
     let api: APIClient
     var title: String = "Choose Destination"
+    /// Address Book shortcut for destination picking. Hidden when already selecting from the book
+    /// (e.g. nested mailbox lookup while editing an address-book entry).
+    var showsAddressBookShortcut: Bool = true
     let onSelect: (MailboxSummary) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -44,6 +47,19 @@ struct DestinationMailboxPickerSheet: View {
                         Button(role: .cancel) { dismiss() }
                     } else {
                         Button("Cancel") { dismiss() }
+                    }
+                }
+
+                if showsAddressBookShortcut, selectedPostOffice == nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        NavigationLink {
+                            AddressBook(viewmodel: .init(api: api)) { entry in
+                                onSelect(entry.mailboxSummary)
+                                dismiss()
+                            }
+                        } label: {
+                            Label("Address Book", systemImage: "book")
+                        }
                     }
                 }
 

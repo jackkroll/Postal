@@ -43,17 +43,22 @@ import Observation
         switch route {
         case .login:
             SignInView(viewmodel: .init(auth: AppServices.auth))
-        case .track(trackingNum: let trackingNum, letter: let letter):
+        case .track(trackingNum: let trackingNum, letter: let letter, isRecipient: let isRecipient):
             TrackingView(viewmodel: .init(
                 apiClient: AppServices.api,
                 letterService: LetterContentService(api: AppServices.api),
                 trackingNumber: trackingNum,
-                letterSummary: letter
+                letterSummary: letter,
+                isRecipient: isRecipient
             ))
         case .landing:
             LettersListView()
-        case .ship:
-            LetterCreationView(viewmodel: .init(api: AppServices.api))
+        case let .ship(origin, destination):
+            LetterCreationView(viewmodel: .init(
+                api: AppServices.api,
+                origin: origin,
+                destination: destination
+            ))
         case .claimBox:
             ClaimMailboxView()
         case .settings:
@@ -83,9 +88,10 @@ enum ViewRoute: Hashable {
     case landing
     case claimBox
     case settings
-    case track(trackingNum: String?, letter: LetterSummary? = nil)
+    case track(trackingNum: String?, letter: LetterSummary? = nil, isRecipient: Bool = false)
     case read(shipmentID: String, metadata: LetterMetadata, service: LetterContentProviding)
-    case ship
+    /// Opens letter creation, optionally prefilling return (`origin`) and destination mailboxes.
+    case ship(origin: MailboxSummary? = nil, destination: MailboxSummary? = nil)
     case compose(source: MailboxSummary, destination: MailboxSummary)
     case addressbook
 
@@ -95,11 +101,14 @@ enum ViewRoute: Hashable {
              (.landing, .landing),
              (.claimBox, .claimBox),
              (.settings, .settings),
-             (.ship, .ship),
              (.addressbook, .addressbook):
             return true
-        case let (.track(lt, ll), .track(rt, rl)):
-            return lt == rt && ((ll == nil && rl == nil) || (ll?.id == rl?.id))
+        case let (.ship(lo, ld), .ship(ro, rd)):
+            return lo?.id == ro?.id && ld?.id == rd?.id
+        case let (.track(lt, ll, lr), .track(rt, rl, rr)):
+            return lt == rt
+                && ((ll == nil && rl == nil) || (ll?.id == rl?.id))
+                && lr == rr
         case let (.read(ls, lm, _), .read(rs, rm, _)):
             return ls == rs && lm.hashValue == rm.hashValue
         case let (.compose(ls, ld), .compose(rs, rd)):
@@ -119,18 +128,21 @@ enum ViewRoute: Hashable {
             hasher.combine(2)
         case .settings:
             hasher.combine(3)
-        case let .track(trackingNum, letter):
+        case let .track(trackingNum, letter, isRecipient):
             hasher.combine(4)
             hasher.combine(trackingNum)
             hasher.combine(letter?.id)
+            hasher.combine(isRecipient)
         case let .read(shipmentID, metadata, _):
             hasher.combine(5)
             hasher.combine(shipmentID)
             hasher.combine(metadata.byteSize)
             hasher.combine(metadata.filename)
             hasher.combine(metadata.format)
-        case .ship:
+        case let .ship(origin, destination):
             hasher.combine(6)
+            hasher.combine(origin?.id)
+            hasher.combine(destination?.id)
         case let .compose(source, destination):
             hasher.combine(7)
             hasher.combine(source.id)

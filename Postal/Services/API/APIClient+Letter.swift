@@ -39,23 +39,35 @@ extension APIClient {
     func fetchLetter(shipmentID: String, expectedFormat: LetterFormat? = nil) async throws -> LetterContent {
         let (data, response) = try await fetchData(.shipmentLetter(id: shipmentID), authenticated: true)
         let contentType = response.value(forHTTPHeaderField: "Content-Type") ?? ""
+        let filename = Self.filename(from: response)
 
-        if expectedFormat == .text || contentType.contains("application/json") {
+        if expectedFormat == .text || (expectedFormat == nil && contentType.contains("application/json")) {
             let textLetter = try decoder.decode(TextLetterResponse.self, from: data)
             return .text(textLetter.text, mimeType: textLetter.mimeType)
         }
 
+        // Prefer content sniffing over server metadata — hosts that don't know PKDrawing
+        // often store these as generic "encoded" while still serving letter.pkdrawing.
+        let inferredFormat = Self.resolveLetterFormat(
+            expectedFormat: expectedFormat,
+            contentType: contentType,
+            filename: filename
+        )
+
+        let mimeType = contentType.split(separator: ";").first.map(String.init) ?? contentType
         let metadata = LetterMetadata(
-            format: expectedFormat ?? (contentType.hasPrefix("image/") ? .image : .encoded),
-            mimeType: contentType.split(separator: ";").first.map(String.init) ?? contentType,
+            format: inferredFormat,
+            mimeType: mimeType.isEmpty ? (expectedFormat == .pkDrawing ? "application/x-pkdrawing" : mimeType) : mimeType,
             encoding: nil,
-            filename: Self.filename(from: response),
+            filename: filename,
             byteSize: data.count
         )
 
         switch metadata.format {
         case .image:
             return .image(data, metadata: metadata)
+        case .pkDrawing:
+            return .pkDrawing(data, metadata: metadata)
         case .encoded, .text:
             return .encoded(data, metadata: metadata)
         }
@@ -112,6 +124,43 @@ extension APIClient {
         return match
             .replacingOccurrences(of: "filename=\"", with: "")
             .replacingOccurrences(of: "\"", with: "")
+    }
+
+    /// Resolves display/decode format. Filename and content-type win over a generic
+    /// server `encoded` tag so PKDrawing payloads remain viewable before server support lands.
+    private static func resolveLetterFormat(
+        expectedFormat: LetterFormat?,
+        contentType: String,
+        filename: String?
+    ) -> LetterFormat {
+        if looksLikePKDrawing(contentType: contentType, filename: filename, expectedFormat: expectedFormat) {
+            return .pkDrawing
+        }
+        if let expectedFormat {
+            return expectedFormat
+        }
+        if contentType.hasPrefix("image/") {
+            return .image
+        }
+        return .encoded
+    }
+
+    private static func looksLikePKDrawing(
+        contentType: String,
+        filename: String?,
+        expectedFormat: LetterFormat?
+    ) -> Bool {
+        if expectedFormat == .pkDrawing {
+            return true
+        }
+        let type = contentType.lowercased()
+        if type.contains("pkdrawing") || type.contains("pencilkit") {
+            return true
+        }
+        if let filename, filename.lowercased().hasSuffix(".pkdrawing") {
+            return true
+        }
+        return false
     }
 
     private static func multipartBody(for request: CreateMultipartShipmentRequest, boundary: String) -> Data {

@@ -282,6 +282,9 @@ enum PreviewData {
             destinationName: mainStreetPostOffice.name,
             hasLetter: true,
             letterFormat: .text,
+            letterMimeType: "text/plain",
+            letterByteSize: sampleLetterText.utf8.count,
+            canReadLetter: true,
             createdAt: daysAgo(2),
             updatedAt: hoursAgo(3)
         ),
@@ -293,6 +296,9 @@ enum PreviewData {
             destinationName: mainStreetPostOffice.name,
             hasLetter: true,
             letterFormat: .text,
+            letterMimeType: "text/plain",
+            letterByteSize: sampleLetterText.utf8.count,
+            canReadLetter: true,
             createdAt: daysAgo(6),
             updatedAt: daysAgo(1)
         ),

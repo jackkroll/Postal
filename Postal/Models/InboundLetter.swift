@@ -19,11 +19,33 @@ struct InboundLetterItem: Identifiable, Hashable {
     let destinationName: String
     let hasLetter: Bool
     let letterFormat: LetterFormat?
+    let letterMimeType: String?
+    let letterEncoding: String?
+    let letterByteSize: Int?
+    let canReadLetter: Bool
     let createdAt: Date?
     let updatedAt: Date?
 
     var sortDate: Date {
         updatedAt ?? createdAt ?? .distantPast
+    }
+
+    /// Summary used to open tracking / letter reading from the inbound list.
+    var letterSummary: LetterSummary {
+        LetterSummary(
+            trackingNumber: trackingNumber,
+            shipmentID: id,
+            origin: LetterEndpoint(rawValue: originName),
+            destination: LetterEndpoint(rawValue: destinationName),
+            status: status,
+            hasLetter: hasLetter,
+            letterFormat: letterFormat,
+            letterMimeType: letterMimeType,
+            letterEncoding: letterEncoding,
+            letterByteSize: letterByteSize,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
     }
 
     init(shipment: Shipment) {
@@ -34,6 +56,10 @@ struct InboundLetterItem: Identifiable, Hashable {
         destinationName = shipment.destinationDisplayName
         hasLetter = shipment.letter != nil
         letterFormat = shipment.letter?.format
+        letterMimeType = shipment.letter?.mimeType
+        letterEncoding = shipment.letter?.encoding
+        letterByteSize = shipment.letter?.byteSize
+        canReadLetter = shipment.canReadLetter
         createdAt = shipment.createdAt ?? shipment.requestedAt
         updatedAt = shipment.updatedAt ?? shipment.requestedAt
     }
@@ -46,6 +72,10 @@ struct InboundLetterItem: Identifiable, Hashable {
         destinationName: String,
         hasLetter: Bool = false,
         letterFormat: LetterFormat? = nil,
+        letterMimeType: String? = nil,
+        letterEncoding: String? = nil,
+        letterByteSize: Int? = nil,
+        canReadLetter: Bool = false,
         createdAt: Date? = nil,
         updatedAt: Date? = nil
     ) {
@@ -56,6 +86,10 @@ struct InboundLetterItem: Identifiable, Hashable {
         self.destinationName = destinationName
         self.hasLetter = hasLetter
         self.letterFormat = letterFormat
+        self.letterMimeType = letterMimeType
+        self.letterEncoding = letterEncoding
+        self.letterByteSize = letterByteSize
+        self.canReadLetter = canReadLetter
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

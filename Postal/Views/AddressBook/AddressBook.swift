@@ -10,6 +10,10 @@ import SwiftUI
 
 struct AddressBook: View {
     @State var viewmodel: ViewModel
+    /// When set, the book is used to pick an address (no browse-only actions like Send Letter).
+    var onSelect: ((AddressBookEntrySummary) -> Void)? = nil
+
+    private var isSelecting: Bool { onSelect != nil }
 
     var body: some View {
         Group {
@@ -17,7 +21,11 @@ struct AddressBook: View {
                 ContentUnavailableView {
                     Label("No Addresses Saved", systemImage: "house.fill")
                 } description: {
-                    Text("Add a nickname and mailbox so you can send letters faster.")
+                    Text(
+                        isSelecting
+                            ? "Add a nickname and mailbox, then choose it as the destination."
+                            : "Add a nickname and mailbox so you can send letters faster."
+                    )
                 } actions: {
                     Button("Add Address") {
                         viewmodel.presentAdd()
@@ -29,7 +37,8 @@ struct AddressBook: View {
                         ForEach(viewmodel.addresses) { address in
                             SingleAddressEntryView(
                                 address: address,
-                                selectedEdit: $viewmodel.editor
+                                selectedEdit: $viewmodel.editor,
+                                onSelect: onSelect
                             )
                         }
                     }
@@ -37,7 +46,7 @@ struct AddressBook: View {
                 }
             }
         }
-        .navigationTitle("Address Book")
+        .navigationTitle(isSelecting ? "Choose Address" : "Address Book")
         .toolbar {
             if #available(iOS 26.0, *) {
                 ToolbarSpacer(placement: .bottomBar)
@@ -117,7 +126,7 @@ struct AddressEditView: View {
         case let .edit(entry):
             self._nickname = State(initialValue: entry.nickname)
             self._notes = State(initialValue: entry.notes ?? "")
-            self._selectedMailbox = State(initialValue: Self.mailboxSummary(from: entry))
+            self._selectedMailbox = State(initialValue: entry.mailboxSummary)
         }
     }
 
@@ -208,9 +217,11 @@ struct AddressEditView: View {
             }
         }
         .sheet(isPresented: $isMailboxPickerPresented) {
+            // Nested mailbox lookup only — no Address Book shortcut while already picking.
             DestinationMailboxPickerSheet(
                 api: api,
-                title: "Choose Mailbox"
+                title: "Choose Mailbox",
+                showsAddressBookShortcut: false
             ) { mailbox in
                 selectedMailbox = mailbox
                 errorMessage = nil
@@ -257,22 +268,14 @@ struct AddressEditView: View {
             errorMessage = error.localizedDescription
         }
     }
-
-    private static func mailboxSummary(from entry: AddressBookEntrySummary) -> MailboxSummary {
-        MailboxSummary(
-            id: entry.mailboxID,
-            postOfficeID: entry.postOfficeID ?? entry.mailboxID.postOfficeID,
-            postOfficeName: entry.postOfficeName,
-            label: entry.mailboxLabel ?? "Box \(entry.mailboxID.code)",
-            ownerUserID: nil,
-            owned: false
-        )
-    }
 }
 
 struct SingleAddressEntryView: View {
     let address: AddressBookEntrySummary
     @Binding var selectedEdit: AddressEditorMode?
+    var onSelect: ((AddressBookEntrySummary) -> Void)? = nil
+
+    private var isSelecting: Bool { onSelect != nil }
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -281,18 +284,12 @@ struct SingleAddressEntryView: View {
                     Text(address.nickname)
                         .font(.title3)
                         .bold()
-                    if let label = address.mailboxLabel {
                         HStack {
-                            Text(label)
+                            Text(address.mailboxSummary.locationLabel)
                             Text(address.mailboxID.code)
                         }
                         .foregroundStyle(.secondary)
                         .font(.caption)
-                    } else if let postOfficeName = address.postOfficeName {
-                        Text("\(postOfficeName) · \(address.mailboxID.code)")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    }
                 }
                 Spacer()
             }
@@ -303,13 +300,26 @@ struct SingleAddressEntryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
-                NavigationLink(value: ViewRoute.ship) {
-                    Label("Send Letter", systemImage: "envelope.fill")
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(.green)
-                        .tint(.primary)
-                        .clipShape(Capsule())
+                if isSelecting {
+                    Button {
+                        onSelect?(address)
+                    } label: {
+                        Label("Select", systemImage: "checkmark.circle.fill")
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(.green)
+                            .tint(.primary)
+                            .clipShape(Capsule())
+                    }
+                } else {
+                    NavigationLink(value: ViewRoute.ship(destination: address.mailboxSummary)) {
+                        Label("Send Letter", systemImage: "envelope.fill")
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(.green)
+                            .tint(.primary)
+                            .clipShape(Capsule())
+                    }
                 }
                 Button {
                     withAnimation {
@@ -379,6 +389,12 @@ extension AddressBook {
 #Preview("Populated") {
     NavigationStack {
         AddressBook(viewmodel: .preview())
+    }
+}
+
+#Preview("Selection") {
+    NavigationStack {
+        AddressBook(viewmodel: .preview()) { _ in }
     }
 }
 

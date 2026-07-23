@@ -57,6 +57,7 @@ extension TrackingView.ViewModel {
         trackingNumber: String = "",
         route: TrackingRoute? = nil,
         letterSummary: LetterSummary? = nil,
+        isRecipient: Bool = false,
         errorMessage: String? = nil,
         isLoading: Bool = false
     ) -> TrackingView.ViewModel {
@@ -64,6 +65,7 @@ extension TrackingView.ViewModel {
             apiClient: APIClient(),
             letterService: PreviewLetterContentService(),
             letterSummary: letterSummary,
+            isRecipient: isRecipient,
             autoLookup: false
         )
         viewModel.trackingNumber = trackingNumber
@@ -120,6 +122,7 @@ extension LetterCreationView.ViewModel {
         selectedOriginMailbox: MailboxSummary? = nil,
         selectedDestinationMailbox: MailboxSummary? = nil,
         letterText: String = "",
+        composeKind: LetterComposeKind? = nil,
         isStampApplied: Bool = false,
         isSending: Bool = false
     ) -> LetterCreationView.ViewModel {
@@ -132,6 +135,7 @@ extension LetterCreationView.ViewModel {
         viewModel.selectedDestinationMailbox = selectedDestinationMailbox
         viewModel.letterText = letterText
         viewModel.recomputeLetterMetrics(from: letterText)
+        viewModel.composeKind = composeKind ?? (letterText.isEmpty ? nil : .text)
         viewModel.isStampApplied = isStampApplied
         viewModel.isSending = isSending
         return viewModel

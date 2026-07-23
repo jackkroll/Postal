@@ -33,6 +33,7 @@ extension LetterFormat {
         case .text: "Text letter"
         case .image: "Image letter"
         case .encoded: "Encoded letter"
+        case .pkDrawing: "Drawing letter"
         }
     }
 }

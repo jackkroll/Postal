@@ -4,6 +4,7 @@ enum LetterFormat: String, Codable, Hashable {
     case text
     case image
     case encoded
+    case pkDrawing = "PKDrawing"
 }
 
 /// Metadata returned on shipment create and shipment detail (no bytes).
@@ -88,6 +89,15 @@ struct CreateMultipartLetterPayload {
         self.fileData = fileData
         self.filename = filename
     }
+
+    static func pkDrawing(_ data: Data) -> CreateMultipartLetterPayload {
+        CreateMultipartLetterPayload(
+            format: .pkDrawing,
+            mimeType: "application/x-pkdrawing",
+            fileData: data,
+            filename: "letter.pkdrawing"
+        )
+    }
 }
 
 struct CreateMultipartShipmentRequest {
@@ -131,12 +141,14 @@ enum LetterContent: Hashable {
     case text(String, mimeType: String)
     case image(Data, metadata: LetterMetadata)
     case encoded(Data, metadata: LetterMetadata)
+    case pkDrawing(Data, metadata: LetterMetadata)
 
     var format: LetterFormat {
         switch self {
         case .text: .text
         case .image: .image
         case .encoded: .encoded
+        case .pkDrawing: .pkDrawing
         }
     }
 }

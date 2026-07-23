@@ -17,6 +17,10 @@ struct TrackingView: View {
                 .animation(.easeInOut, value: viewmodel.trackingRoute)
             }
             Form {
+                if viewmodel.isRecipient, let letterLink = viewmodel.letterReadingLink {
+                    viewLetterSection(letterLink, prominent: true)
+                }
+
                 if let route = viewmodel.trackingRoute {
                     Section {
                         TrackingStatusHeader(route: route, summary: route.statusSummary())
@@ -55,11 +59,9 @@ struct TrackingView: View {
                         }
                     }
                 }
-                
-                if let shipmentID = viewmodel.shipmentID, let metadata = viewmodel.letterMetadata{
-                    NavigationLink(value: ViewRoute.read(shipmentID: shipmentID, metadata: metadata, service: viewmodel.letterService )) {
-                        Text("View Letter")
-                    }
+
+                if !viewmodel.isRecipient, let letterLink = viewmodel.letterReadingLink {
+                    viewLetterSection(letterLink, prominent: false)
                 }
 
                 if let errorMessage = viewmodel.errorMessage {
@@ -82,6 +84,31 @@ struct TrackingView: View {
                     UIPasteboard.general.string = viewmodel.trackingNumber
                 } label: {
                     Label("Copy", systemImage: "document.on.document.fill")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func viewLetterSection(
+        _ link: (shipmentID: String, metadata: LetterMetadata),
+        prominent: Bool
+    ) -> some View {
+        Section {
+            NavigationLink(
+                value: ViewRoute.read(
+                    shipmentID: link.shipmentID,
+                    metadata: link.metadata,
+                    service: viewmodel.letterService
+                )
+            ) {
+                if prominent {
+                    Label("View Letter", systemImage: "envelope.open.fill")
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
+                } else {
+                    Text("View Letter")
                 }
             }
         }
@@ -157,6 +184,7 @@ extension TrackingView {
         let letterService: LetterContentProviding
         var trackingNumber: String
         var letterSummary: LetterSummary?
+        var isRecipient: Bool
         var trackingRoute: TrackingRoute?
         var errorMessage: String?
         var isLoading = false
@@ -173,16 +201,23 @@ extension TrackingView {
             letterSummary?.letterMetadata
         }
 
+        var letterReadingLink: (shipmentID: String, metadata: LetterMetadata)? {
+            guard let shipmentID, let letterMetadata else { return nil }
+            return (shipmentID, letterMetadata)
+        }
+
         init(
             apiClient: APIClient,
             letterService: LetterContentProviding = LetterContentService(),
             trackingNumber: String? = nil,
             letterSummary: LetterSummary? = nil,
+            isRecipient: Bool = false,
             autoLookup: Bool = true
         ) {
             self.api = apiClient
             self.letterService = letterService
             self.letterSummary = letterSummary
+            self.isRecipient = isRecipient
             if let trackingNumber {
                 self.trackingNumber = trackingNumber
                 if autoLookup {
@@ -245,6 +280,17 @@ extension TrackingView {
     }
 }
 
+#Preview("Inbound With Letter") {
+    NavigationStack {
+        TrackingView(viewmodel: .preview(
+            trackingNumber: PreviewData.deliveredTrackingNumber,
+            route: PreviewData.routeDelivered,
+            letterSummary: PreviewData.letterDelivered,
+            isRecipient: true
+        ))
+    }
+}
+
 #Preview("Delivered") {
     NavigationStack {
         TrackingView(viewmodel: .preview(
@@ -280,4 +326,3 @@ extension TrackingView {
         ))
     }
 }
-

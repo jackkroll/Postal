@@ -67,9 +67,7 @@ struct PostalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationView {
-                RootView()
-            }
+            RootView()
         }
     }
 }
