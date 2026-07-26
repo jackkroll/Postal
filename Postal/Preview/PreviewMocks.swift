@@ -30,6 +30,47 @@ final class PreviewAuthService: AuthProviding {
     func idToken(forceRefresh: Bool) async throws -> String? { "preview-token" }
 }
 
+@Observable
+final class PreviewEntitlementsService: EntitlementsProviding {
+    var entitlements: UserEntitlements?
+
+    func refresh() async {}
+
+    func claimStampAllowance() async throws -> StampAllowanceClaimResponse {
+        StampAllowanceClaimResponse(credited: 5, stampBalance: 5, nextClaimAt: nil)
+    }
+
+    func clear() {
+        entitlements = nil
+    }
+}
+
+extension UserEntitlements {
+    static let previewFree = UserEntitlements(
+        isSubscriber: false,
+        expiresAt: nil,
+        stampBalance: 3,
+        stampsPerSend: 1,
+        unlimitedSends: false,
+        mailboxLimit: 1,
+        ownedMailboxes: 1,
+        allowance: StampAllowanceInfo(
+            amount: 5,
+            intervalSeconds: 604_800,
+            claimable: true,
+            lastClaimedAt: nil,
+            nextClaimAt: nil,
+            availableWhileSubscribed: false
+        ),
+        notification: NotificationEntitlements(
+            allowedSent: [SentNotificationMode.destinationOnly.rawValue],
+            allowedInbound: [InboundNotificationMode.arrivalOnly.rawValue],
+            defaultSent: SentNotificationMode.destinationOnly.rawValue,
+            defaultInbound: InboundNotificationMode.arrivalOnly.rawValue
+        )
+    )
+}
+
 // MARK: - View Model Factories
 
 extension LettersListView.ViewModel {
@@ -131,7 +172,7 @@ extension LetterCreationView.ViewModel {
         let viewModel = LetterCreationView.ViewModel(api: APIClient())
         viewModel.phase = phase
         viewModel.envelopeVisible = true
-        viewModel.letterPlacement = phase == .compose ? .revealed : .tucked
+        viewModel.letterPlacement = phase == .letterType ? .revealed : .tucked
         viewModel.ownedMailboxes = ownedMailboxes
         viewModel.selectedOriginMailboxID = selectedOriginMailbox?.id
         viewModel.selectedDestinationMailbox = selectedDestinationMailbox
@@ -188,11 +229,18 @@ extension SettingsView.ViewModel {
         registeredSummary: DeviceTokenSummary? = nil,
         errorMessage: String? = nil,
         isRegistering: Bool = false,
-        sentMode: SentNotificationMode = .shipmentDetails,
-        inboundMode: InboundNotificationMode = .shipmentDetails
+        sentMode: SentNotificationMode = .destinationOnly,
+        inboundMode: InboundNotificationMode = .arrivalOnly
     ) -> SettingsView.ViewModel {
         let push = PreviewPushNotificationService(authorizationStatus: authorizationStatus)
-        let viewModel = SettingsView.ViewModel(api: APIClient(), auth: PreviewAuthService(), push: push)
+        let entitlements = PreviewEntitlementsService()
+        entitlements.entitlements = .previewFree
+        let viewModel = SettingsView.ViewModel(
+            api: APIClient(),
+            auth: PreviewAuthService(),
+            push: push,
+            entitlementsService: entitlements
+        )
         viewModel.authorizationStatus = authorizationStatus
         viewModel.registeredSummary = registeredSummary
         viewModel.errorMessage = errorMessage
@@ -200,6 +248,8 @@ extension SettingsView.ViewModel {
         viewModel.showSuccess = registeredSummary != nil
         viewModel.sentMode = sentMode
         viewModel.inboundMode = inboundMode
+        viewModel.allowedSentModes = [.destinationOnly]
+        viewModel.allowedInboundModes = [.arrivalOnly]
         return viewModel
     }
 }
@@ -251,4 +301,6 @@ final class PreviewPushNotificationService: PushNotificationsProviding {
     func clearLocalRegistration(userOptedOut: Bool) {
         currentDeviceToken = nil
     }
+
+    func clearAppIconBadge() async {}
 }

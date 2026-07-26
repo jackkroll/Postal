@@ -11,26 +11,30 @@ struct DraftSaveStatusLabel: View {
     let status: DraftSaveStatus
 
     var body: some View {
-        switch status {
-        case .hidden:
-            EmptyView()
-        case .saving:
-            Label("Saving draft…", systemImage: "ellipsis.circle")
-                .labelStyle(.titleAndIcon)
-                .font(.caption.weight(.medium))
-                .accessibilityLabel("Saving draft")
-                .padding(10)
-                .background(.blue.opacity(0.25) )
-                .clipShape(.capsule)
-        case .saved:
-            Label("Draft saved", systemImage: "checkmark.circle.fill")
-                .labelStyle(.titleAndIcon)
-                .font(.caption.weight(.medium))
-                .accessibilityLabel("Draft saved")
-                .padding(10)
-                .background(.green.opacity(0.25) )
-                .clipShape(.capsule)
+        Group {
+            switch status {
+            case .hidden:
+                EmptyView()
+            case .saving:
+                Label("Saving draft…", systemImage: "ellipsis.circle")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption.weight(.medium))
+                    .accessibilityLabel("Saving draft")
+                    .padding(10)
+                    .background(.blue.opacity(0.25))
+                    .clipShape(.capsule)
+            case .saved:
+                Label("Draft saved", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption.weight(.medium))
+                    .accessibilityLabel("Draft saved")
+                    .padding(10)
+                    .background(.green.opacity(0.25))
+                    .clipShape(.capsule)
+            }
         }
+        .contentTransition(.opacity)
+        .animation(.snappy(duration: 0.2), value: status)
     }
 }
 #Preview("Saved"){

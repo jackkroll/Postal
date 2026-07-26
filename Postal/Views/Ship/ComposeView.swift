@@ -90,19 +90,19 @@ private struct ComposeSendButton: View {
 extension ComposeView {
     @Observable
     class ViewModel {
-        static let maxLetterBytes = 65_536
-
-        private static let byteCountFormatter: ByteCountFormatter = {
-            let formatter = ByteCountFormatter()
-            formatter.countStyle = .file
-            return formatter
-        }()
-
         let api: APIClient
-        init(api: APIClient, source: MailboxSummary, destination: MailboxSummary) {
+        let limits: LetterLimits
+
+        init(
+            api: APIClient,
+            source: MailboxSummary,
+            destination: MailboxSummary,
+            limits: LetterLimits = AppConfiguration.letterLimits
+        ) {
             self.api = api
             self.source = source
             self.destination = destination
+            self.limits = limits
         }
 
         var source: MailboxSummary
@@ -118,7 +118,7 @@ extension ComposeView {
         }
 
         var isOverByteLimit: Bool {
-            letterByteCount > Self.maxLetterBytes
+            limits.exceedsLimit(letterByteCount, for: .text)
         }
 
         var canSend: Bool {
@@ -128,9 +128,7 @@ extension ComposeView {
         }
 
         var byteCountLabel: String {
-            let current = Self.byteCountFormatter.string(fromByteCount: Int64(letterByteCount))
-            let max = Self.byteCountFormatter.string(fromByteCount: Int64(Self.maxLetterBytes))
-            return "\(current) / \(max)"
+            limits.usageLabel(letterByteCount, for: .text)
         }
 
         private func trimmed(_ value: String) -> String {
@@ -179,7 +177,7 @@ extension ComposeView {
 #Preview("Over Limit") {
     NavigationStack {
         ComposeView(viewmodel: .preview(
-            letterText: String(repeating: "A", count: ComposeView.ViewModel.maxLetterBytes + 1)
+            letterText: String(repeating: "A", count: AppConfiguration.letterLimits.maxTextBytes + 1)
         ))
     }
 }

@@ -105,8 +105,6 @@ struct ShipLetterView: View {
 extension ShipLetterView {
     @Observable
     class ViewModel {
-        static let maxLetterBytes = 65_536
-
         let api: APIClient
         var ownedMailboxes: [MailboxSummary] = []
         /// Selection stored by ID so Picker tags stay cheap to hash/diff.

@@ -57,6 +57,14 @@ final class APIClient {
         try await request(endpoint, body: body, authenticated: authenticated)
     }
 
+    /// POST with no JSON body (e.g. stamp allowance claim).
+    func postEmpty<Response: Decodable>(
+        _ endpoint: APIEndpoint,
+        authenticated: Bool = true
+    ) async throws -> Response {
+        try await request(endpoint, body: Optional<String>.none, authenticated: authenticated)
+    }
+
     func put<Body: Encodable, Response: Decodable>(
         _ endpoint: APIEndpoint,
         body: Body,
@@ -132,6 +140,19 @@ final class APIClient {
         }
         if let body = try? JSONDecoder().decode(StringDetailBody.self, from: data) {
             return body.detail
+        }
+
+        struct ObjectDetailBody: Decodable {
+            struct DetailObject: Decodable {
+                let message: String?
+            }
+
+            let detail: DetailObject
+        }
+        if let body = try? JSONDecoder().decode(ObjectDetailBody.self, from: data),
+           let message = body.detail.message,
+           !message.isEmpty {
+            return message
         }
 
         struct ValidationIssue: Decodable {

@@ -1,3 +1,4 @@
+import FirebaseAuth
 import FirebaseCore
 import SwiftUI
 import UIKit
@@ -8,23 +9,26 @@ class AppDelegate: NSObject, UIApplicationDelegate {
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
     FirebaseApp.configure()
+    configurePurchases()
     // Kick off APNs early when permission is already granted so Settings
     // does not have to wait on a cold registration.
     Task { @MainActor in
+      await AppServices.pushNotifications.clearAppIconBadge()
       await AppServices.pushNotifications.registerIfAuthorized()
     }
     return true
   }
 
-  func applicationDidBecomeActive(_ application: UIApplication) {
-    clearAppIconBadge()
-    Task { @MainActor in
-      await AppServices.pushNotifications.registerIfAuthorized()
+  /// Configure RevenueCat after Firebase so a restored session can be identified
+  /// immediately — avoids a cold-start anonymous ID that occasionally never gets replaced.
+  private func configurePurchases() {
+    guard !Purchases.isConfigured else { return }
+    let apiKey = AppConfiguration.revenueCatAPIKey
+    if let uid = Auth.auth().currentUser?.uid {
+      Purchases.configure(withAPIKey: apiKey, appUserID: uid)
+    } else {
+      Purchases.configure(withAPIKey: apiKey)
     }
-  }
-
-  private func clearAppIconBadge() {
-    UNUserNotificationCenter.current().setBadgeCount(0)
   }
 
   func application(
@@ -65,17 +69,32 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 @main
 struct PostalApp: App {
-    // register app delegate for Firebase setup
+    // register app delegate for Firebase + RevenueCat setup
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         AppServices.api.setTokenProvider(AppServices.auth)
-        Purchases.configure(withAPIKey: "test_rRnDkBOcujFwHzjaENBwopVBScN")
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { @MainActor in
+                await AppServices.pushNotifications.clearAppIconBadge()
+                await AppServices.pushNotifications.registerIfAuthorized()
+                // Recover if a prior RC logIn was cancelled or failed while backgrounded.
+                let uid = Auth.auth().currentUser?.uid
+                if !AppServices.purchasesIdentity.isAligned(with: uid) {
+                    let aligned = await AppServices.purchasesIdentity.sync(firebaseUserID: uid)
+                    if aligned, uid != nil {
+                        await AppServices.entitlements.refresh()
+                    }
+                }
+            }
         }
     }
 }

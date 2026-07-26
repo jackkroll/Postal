@@ -46,13 +46,21 @@ struct AddressBook: View {
                     Label("Add Address", systemImage: "plus")
                 }
             }
-            if !isSelecting {
+            if !isSelecting, viewmodel.canClaimMailbox {
                 ToolbarItem(placement: .bottomBar) {
                     NavigationLink(value: ViewRoute.claimBox) {
                         Label(
                             viewmodel.ownedMailboxes.isEmpty ? "Claim Mailbox" : "Claim Another",
                             systemImage: "tray.and.arrow.down"
                         )
+                    }
+                }
+            } else if !isSelecting, viewmodel.showsMailboxUpgrade {
+                ToolbarItem(placement: .bottomBar) {
+                    Button {
+                        viewmodel.isPaywallPresented = true
+                    } label: {
+                        Label(PromoText.moreMailboxes, systemImage: "star.fill")
                     }
                 }
             }
@@ -68,6 +76,11 @@ struct AddressBook: View {
                 )
             }
             .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $viewmodel.isPaywallPresented) {
+            PlusPaywallSheet {
+                Task { await viewmodel.refresh() }
+            }
         }
         .task {
             guard loadsOnAppear else { return }
@@ -131,10 +144,17 @@ struct MyMailboxesSection: View {
                 } description: {
                     Text("Claim a mailbox to send and receive letters.")
                 } actions: {
-                    NavigationLink(value: ViewRoute.claimBox) {
-                        Text("Claim a Mailbox")
+                    if viewmodel.canClaimMailbox {
+                        NavigationLink(value: ViewRoute.claimBox) {
+                            Text("Claim a Mailbox")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if viewmodel.showsMailboxUpgrade {
+                        Button(PromoText.upgradeToPlus) {
+                            viewmodel.isPaywallPresented = true
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
             } else {
                 ForEach(viewmodel.ownedMailboxes) { mailbox in
@@ -494,16 +514,31 @@ extension AddressBook {
     @Observable
     class ViewModel {
         let api: APIClient
+        let entitlementsService: EntitlementsProviding
         var addresses: [AddressBookEntrySummary]
         var ownedMailboxes: [MailboxSummary]
         var isLoadingOwned = false
         var errorMsg: String?
         var editor: AddressEditorMode?
+        var isPaywallPresented = false
 
-        init(api: APIClient) {
+        init(
+            api: APIClient,
+            entitlementsService: EntitlementsProviding = AppServices.entitlements
+        ) {
             self.api = api
+            self.entitlementsService = entitlementsService
             self.addresses = []
             self.ownedMailboxes = []
+        }
+
+        var canClaimMailbox: Bool {
+            entitlementsService.entitlements?.canClaimAnotherMailbox ?? ownedMailboxes.isEmpty
+        }
+
+        var showsMailboxUpgrade: Bool {
+            guard let entitlements = entitlementsService.entitlements else { return false }
+            return !entitlements.canClaimAnotherMailbox && !entitlements.isSubscriber
         }
 
         func presentAdd() {
@@ -511,9 +546,10 @@ extension AddressBook {
         }
 
         func refresh() async {
+            async let entitlementsFetch: Void = entitlementsService.refresh()
             async let addressesFetch: Void = fetchAddresses()
             async let ownedFetch: Void = fetchOwnedMailboxes()
-            _ = await (addressesFetch, ownedFetch)
+            _ = await (entitlementsFetch, addressesFetch, ownedFetch)
         }
 
         func fetchAddresses() async {

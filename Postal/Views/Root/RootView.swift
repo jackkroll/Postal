@@ -1,4 +1,5 @@
 import SwiftUI
+import RevenueCat
 
 struct RootView: View {
     @State private var router = Router()
@@ -20,10 +21,30 @@ struct RootView: View {
             }
         }
         .environment(router)
-        .task(id: authState.isSignedIn) {
-            guard authState.isSignedIn else { return }
-            await Self.registerForNotificationsIfAuthorized()
+        .task(id: authState.userID) {
+            if let userID = authState.userID {
+                await Self.handleSignedIn(userID: userID)
+            } else {
+                await Self.handleSignedOut()
+            }
         }
+    }
+
+    /// Link Firebase uid to RevenueCat, refresh entitlements, and re-register push.
+    private static func handleSignedIn(userID: String) async {
+        let aligned = await AppServices.purchasesIdentity.sync(firebaseUserID: userID)
+        guard !Task.isCancelled else { return }
+        // Prefer a confirmed RC identity before reading STAMP / refreshing.
+        guard aligned || AppServices.purchasesIdentity.isAligned(with: userID) else { return }
+        await AppServices.entitlements.refresh()
+        await registerForNotificationsIfAuthorized()
+    }
+
+    /// Reset RevenueCat to an anonymous user and clear local entitlements.
+    private static func handleSignedOut() async {
+        _ = await AppServices.purchasesIdentity.sync(firebaseUserID: nil)
+        guard !Task.isCancelled else { return }
+        AppServices.entitlements.clear()
     }
 
     /// Re-register the device token with the server after sign-in when permission

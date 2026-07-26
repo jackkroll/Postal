@@ -10,7 +10,8 @@ import PencilKit
 
 struct CanvasView: View {
     let initialDrawingData: Data?
-    let draftSaveStatus: DraftSaveStatus
+    @Binding var draftSaveStatus: DraftSaveStatus
+    let limits: LetterLimits
     let onDrawingChange: (Data) -> Void
     let onContinue: (Data) -> Void
 
@@ -20,25 +21,33 @@ struct CanvasView: View {
     @State private var isDrawingEmpty = true
     @State private var isToolPickerVisible = true
     @State private var didRestoreInitialDrawing = false
+    @State private var drawingByteCount = 0
     @State private var changeNotifyTask: Task<Void, Never>?
 
     init(
         initialDrawingData: Data? = nil,
-        draftSaveStatus: DraftSaveStatus = .hidden,
+        draftSaveStatus: Binding<DraftSaveStatus> = .constant(.hidden),
+        limits: LetterLimits = AppConfiguration.letterLimits,
         onDrawingChange: @escaping (Data) -> Void = { _ in },
         onContinue: @escaping (Data) -> Void
     ) {
         self.initialDrawingData = initialDrawingData
-        self.draftSaveStatus = draftSaveStatus
+        _draftSaveStatus = draftSaveStatus
+        self.limits = limits
         self.onDrawingChange = onDrawingChange
         self.onContinue = onContinue
     }
 
+    private var isOverLimit: Bool { limits.exceedsLimit(drawingByteCount, for: .drawing) }
+
     var body: some View {
         VStack(spacing: 0) {
-            if draftSaveStatus != .hidden {
-                DraftSaveStatusLabel(status: draftSaveStatus)
-            }
+            LetterComposerStatusBar(
+                draftSaveStatus: $draftSaveStatus,
+                byteCount: drawingByteCount,
+                kind: .drawing,
+                limits: limits
+            )
 
             CanvasUIView(
                 canvasView: $canvas,
@@ -81,7 +90,7 @@ struct CanvasView: View {
                 } label: {
                     Label("Continue", systemImage: "chevron.forward")
                 }
-                .disabled(isDrawingEmpty)
+                .disabled(isDrawingEmpty || isOverLimit)
                 .buttonStyle(.borderedProminent)
             }
         }
@@ -109,6 +118,7 @@ struct CanvasView: View {
         else { return }
         canvas.drawing = drawing
         isDrawingEmpty = drawing.strokes.isEmpty
+        drawingByteCount = initialDrawingData.count
     }
 
     private func scheduleDrawingChangeNotification() {
@@ -124,7 +134,9 @@ struct CanvasView: View {
         if immediate {
             changeNotifyTask?.cancel()
         }
-        onDrawingChange(canvas.drawing.dataRepresentation())
+        let data = canvas.drawing.dataRepresentation()
+        drawingByteCount = data.count
+        onDrawingChange(data)
     }
 }
 
@@ -180,6 +192,6 @@ struct CanvasUIView: UIViewRepresentable {
 
 #Preview {
     NavigationStack {
-        CanvasView(draftSaveStatus: .saved) { _ in }
+        CanvasView(draftSaveStatus: .constant(.saved)) { _ in }
     }
 }

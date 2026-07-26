@@ -12,6 +12,8 @@ enum APIEndpoint {
     case unregisterDeviceToken
     case meNotificationPreferences
     case updateNotificationPreferences
+    case meEntitlements
+    case claimStampAllowance
     case meInboundLetters(status: ShipmentStatus?, limit: Int?)
     case meMailboxInboundLetters(mailboxID: String, status: ShipmentStatus?, limit: Int?)
     case validateMailbox(mailboxID: String)
@@ -46,6 +48,10 @@ enum APIEndpoint {
             return "/api/me/device-tokens"
         case .meNotificationPreferences, .updateNotificationPreferences:
             return "/api/me/notification-preferences"
+        case .meEntitlements:
+            return "/api/me/entitlements"
+        case .claimStampAllowance:
+            return "/api/me/stamps/allowance/claim"
         case .meInboundLetters:
             return "/api/me/inbound-letters"
         case let .meMailboxInboundLetters(mailboxID, _, _):
@@ -79,7 +85,7 @@ enum APIEndpoint {
 
     var method: String {
         switch self {
-        case .createShipment, .claimMailbox, .registerDeviceToken, .addAddressToBook:
+        case .createShipment, .claimMailbox, .registerDeviceToken, .addAddressToBook, .claimStampAllowance:
             return "POST"
         case .updateNotificationPreferences, .updateAddressEntry:
             return "PUT"

@@ -1,3 +1,4 @@
+import PencilKit
 import SwiftUI
 
 enum LetterCreationRegion: Hashable {
@@ -221,14 +222,29 @@ struct ShippingEnvelopeView: View {
 
 // MARK: - Letter sheet
 
-/// Writable letter paper that slides out of the envelope’s top opening.
+/// What the letter paper shows in the guided flow.
+enum LetterSheetContent: Equatable {
+    /// Nothing chosen yet and the letter isn't the active step (tucked behind the envelope).
+    case blank
+    /// Write / draw options rendered on the paper itself.
+    case chooser
+    case text(String)
+    case drawing(Data)
+}
+
+/// Letter paper that slides out of the envelope’s top opening.
+///
+/// Composing happens on dedicated pages (`LetterTextComposerView` / `CanvasView`);
+/// this sheet offers the choice between them and previews whatever was written.
 struct LetterSheetView: View {
-    let isComposing: Bool
-    let letterText: String
-    var drawingAttached: Bool = false
+    let content: LetterSheetContent
     let isHighlighted: Bool
-    @Binding var letterTextBinding: String
-    @FocusState.Binding var isComposerFocused: Bool
+    let isInteractive: Bool
+    var warning: String?
+    var onWrite: () -> Void = {}
+    var onDraw: () -> Void = {}
+    var onEdit: () -> Void = {}
+    var onDiscard: () -> Void = {}
 
     /// Static shadow — do not animate radius (expensive offscreen passes).
     private let shadowRadius: CGFloat = 12
@@ -236,7 +252,7 @@ struct LetterSheetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            content
+            paperContent
                 .padding(14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background {
@@ -264,47 +280,165 @@ struct LetterSheetView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
-        if isComposing {
-            TextEditor(text: $letterTextBinding)
-                .focused($isComposerFocused)
-                .font(.body)
-                .foregroundStyle(.primary)
-                .scrollContentBackground(.hidden)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .transaction { $0.animation = nil }
-                .overlay(alignment: .topLeading) {
-                    if letterTextBinding.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Write your letter…")
-                            .font(.body)
-                            .foregroundStyle(.tertiary)
-                            .padding(.top, 8)
-                            .padding(.leading, 5)
-                            .allowsHitTesting(false)
-                    }
-                }
-        } else if drawingAttached {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Drawing attached", systemImage: "pencil.tip.crop.circle")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text("Your handwritten letter is ready to send.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        } else if !letterText.isEmpty {
-            ScrollView {
-                Text(letterText)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-        } else {
+    private var paperContent: some View {
+        switch content {
+        case .blank:
             Text("Write your letter…")
                 .font(.body)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .chooser:
+            chooser
+        case let .text(text):
+            filledLetter {
+                ScrollView {
+                    Text(text)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+        case let .drawing(data):
+            filledLetter {
+                LetterDrawingPreview(data: data)
+            }
         }
+    }
+
+    private var chooser: some View {
+        VStack(spacing: 12) {
+            Spacer(minLength: 0)
+
+            composeOption(
+                title: "Write",
+                subtitle: "Type your letter.",
+                systemImage: "square.and.pencil",
+                action: onWrite
+            )
+
+            composeOption(
+                title: "Draw",
+                subtitle: "Handwrite or sketch it.",
+                systemImage: "pencil.tip.crop.circle",
+                action: onDraw
+            )
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func composeOption(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 34)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.06))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(
+                                Color.accentColor.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                            )
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isInteractive)
+        .accessibilityHint("Opens the \(title.lowercased()) page")
+    }
+
+    private func filledLetter(@ViewBuilder preview: () -> some View) -> some View {
+        VStack(spacing: 10) {
+            preview()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            if let warning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if isInteractive {
+                HStack(spacing: 12) {
+                    Button("Edit", systemImage: "pencil", action: onEdit)
+                        .buttonStyle(.bordered)
+                    Spacer(minLength: 0)
+                    Button("Start Over", systemImage: "arrow.uturn.backward", action: onDiscard)
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                }
+                .controlSize(.small)
+                .labelStyle(.titleAndIcon)
+                .font(.footnote)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+/// Renders PKDrawing bytes once per change so the stage doesn't rasterize on every layout pass.
+private struct LetterDrawingPreview: View {
+    let data: Data
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Label("Drawing attached", systemImage: "pencil.tip.crop.circle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+        .task(id: data) {
+            image = Self.render(data)
+        }
+        .accessibilityLabel("Drawn letter")
+    }
+
+    private static func render(_ data: Data) -> UIImage? {
+        guard let drawing = try? PKDrawing(data: data), !drawing.strokes.isEmpty else { return nil }
+        var bounds = drawing.bounds
+        guard !bounds.isNull, bounds.width >= 1, bounds.height >= 1 else { return nil }
+        bounds = bounds.insetBy(dx: -16, dy: -16)
+        return drawing.image(from: bounds, scale: 1)
     }
 }

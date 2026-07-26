@@ -35,6 +35,8 @@ protocol PushNotificationsProviding: AnyObject {
     /// Stop receiving remote notifications and clear the cached APNs token.
     /// - Parameter userOptedOut: When true, automatic APNs re-registration is skipped until notifications are enabled again.
     func clearLocalRegistration(userOptedOut: Bool)
+    /// Clears the app icon badge (best-effort).
+    func clearAppIconBadge() async
 }
 
 @MainActor
@@ -160,6 +162,14 @@ final class PushNotificationService: NSObject, PushNotificationsProviding {
         UIApplication.shared.unregisterForRemoteNotifications()
         self.userOptedOut = userOptedOut
         logger.info("Cleared local APNs registration (userOptedOut=\(userOptedOut))")
+    }
+
+    func clearAppIconBadge() async {
+        do {
+            try await UNUserNotificationCenter.current().setBadgeCount(0)
+        } catch {
+            logger.error("Failed to clear app icon badge: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func waitForDeviceToken(timeoutSeconds: Double) async throws -> String {

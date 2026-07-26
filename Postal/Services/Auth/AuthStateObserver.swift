@@ -3,13 +3,19 @@ import Observation
 
 @Observable
 final class AuthStateObserver {
-    private(set) var isSignedIn: Bool
-    private var listener: AuthStateDidChangeListenerHandle?
+    private(set) var userID: String?
+    /// Firebase delivers auth callbacks off the main actor; only touched from init/deinit.
+    @ObservationIgnored
+    private nonisolated(unsafe) var listener: AuthStateDidChangeListenerHandle?
+
+    var isSignedIn: Bool { userID != nil }
 
     init() {
-        isSignedIn = Auth.auth().currentUser != nil
+        userID = Auth.auth().currentUser?.uid
         listener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            self?.isSignedIn = user != nil
+            Task { @MainActor in
+                self?.userID = user?.uid
+            }
         }
     }
 

@@ -1,3 +1,4 @@
+import RevenueCatUI
 import SwiftUI
 import UserNotifications
 
@@ -6,6 +7,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State var viewmodel: ViewModel
     @State private var isDeleteAccountPresented = false
+    @State private var isPaywallPresented = false
+    @State private var isCustomerCenterPresented = false
     private let loadsOnAppear: Bool
 
     init(viewmodel: ViewModel, loadsOnAppear: Bool = true) {
@@ -16,17 +19,66 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Status", value: viewmodel.statusTitle)
+                LabeledContent("Plan", value: viewmodel.planTitle)
 
-                if let registeredToken = viewmodel.registeredTokenPreview {
-                    LabeledContent("Device Token") {
-                        Text(registeredToken)
-                            .font(.caption.monospaced())
+                if let entitlements = viewmodel.entitlements {
+                    LabeledContent(
+                        "Stamps",
+                        value: entitlements.unlimitedSends
+                            ? "Unlimited"
+                            : "\(entitlements.stampBalance)"
+                    )
+                    LabeledContent(
+                        "Mailboxes",
+                        value: "\(entitlements.ownedMailboxes) / \(entitlements.mailboxLimit)"
+                    )
+
+                    if entitlements.allowance.claimable {
+                        Button {
+                            Task { await viewmodel.claimStampAllowance() }
+                        } label: {
+                            if viewmodel.isClaimingAllowance {
+                                HStack {
+                                    ProgressView()
+                                    Text("Claiming stamps…")
+                                }
+                            } else {
+                                Label(
+                                    PromoText.claimFreeStamps(amount: entitlements.allowance.amount),
+                                    systemImage: "envelope.badge"
+                                )
+                            }
+                        }
+                        .disabled(viewmodel.isClaimingAllowance)
+                    } else if !entitlements.isSubscriber,
+                              let nextClaim = entitlements.allowance.nextClaimAt {
+                        Text(PromoText.nextFreeStampClaim(at: nextClaim))
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
                     }
                 }
+
+                if viewmodel.isSubscriber {
+                    Button {
+                        isCustomerCenterPresented = true
+                    } label: {
+                        Label(PromoText.manageSubscription, systemImage: "creditcard")
+                    }
+                } else {
+                    Button {
+                        isPaywallPresented = true
+                    } label: {
+                        Label(PromoText.upgradeToPlus, systemImage: "star.fill")
+                    }
+                }
+            } header: {
+                Text("Account")
+            } footer: {
+                Text(viewmodel.accountFooterText)
+            }
+
+            Section {
+                LabeledContent("Status", value: viewmodel.statusTitle)
 
                 if viewmodel.isRegistered {
                     Button(role: .destructive) {
@@ -68,18 +120,26 @@ struct SettingsView: View {
 
             Section {
                 Picker("Sent letters", selection: $viewmodel.sentMode) {
-                    ForEach(SentNotificationMode.allCases, id: \.self) { mode in
+                    ForEach(viewmodel.availableSentModes, id: \.self) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
                 .disabled(viewmodel.isLoadingPreferences || viewmodel.isSavingPreferences)
 
                 Picker("Inbound letters", selection: $viewmodel.inboundMode) {
-                    ForEach(InboundNotificationMode.allCases, id: \.self) { mode in
+                    ForEach(viewmodel.availableInboundModes, id: \.self) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
                 .disabled(viewmodel.isLoadingPreferences || viewmodel.isSavingPreferences)
+
+                if viewmodel.showsNotificationUpgradePrompt {
+                    Button {
+                        isPaywallPresented = true
+                    } label: {
+                        Label(PromoText.unlockShipmentDetails, systemImage: "star.fill")
+                    }
+                }
 
                 if viewmodel.isSavingPreferences {
                     HStack {
@@ -115,12 +175,18 @@ struct SettingsView: View {
                 }
             }
 
-            if viewmodel.showSuccess {
-                Section {
-                    Text("This device is registered for shipment updates.")
-                        .foregroundStyle(.secondary)
+            Section {
+                NavigationLink {
+                    PurchasesDebugView()
+                } label: {
+                    Label("RevenueCat Debug", systemImage: "ladybug")
                 }
+            } header: {
+                Text("Debug")
+            } footer: {
+                Text("Firebase UID, RC app user ID, alignment, entitlements, and STAMP balance.")
             }
+
             Section {
                 Button(role: .destructive) {
                     Task {
@@ -150,6 +216,14 @@ struct SettingsView: View {
                 dismiss()
             }
         }
+        .sheet(isPresented: $isPaywallPresented) {
+            PlusPaywallSheet {
+                Task { await viewmodel.refresh() }
+            }
+        }
+        .presentCustomerCenter(isPresented: $isCustomerCenterPresented, onDismiss: {
+            Task { await viewmodel.refresh() }
+        })
     }
 }
 
@@ -240,6 +314,7 @@ extension SettingsView {
         let api: APIClient
         let auth: AuthProviding
         let push: PushNotificationsProviding
+        let entitlementsService: EntitlementsProviding
 
         var authorizationStatus: UNAuthorizationStatus = .notDetermined
         var registeredSummary: DeviceTokenSummary?
@@ -248,11 +323,14 @@ extension SettingsView {
         var errorMessage: String?
         var showSuccess = false
 
-        var sentMode: SentNotificationMode = .shipmentDetails
-        var inboundMode: InboundNotificationMode = .shipmentDetails
+        var sentMode: SentNotificationMode = .destinationOnly
+        var inboundMode: InboundNotificationMode = .arrivalOnly
+        var allowedSentModes: [SentNotificationMode] = [.destinationOnly]
+        var allowedInboundModes: [InboundNotificationMode] = [.arrivalOnly]
         var isLoadingPreferences = false
         var isSavingPreferences = false
         var isDeletingAccount = false
+        var isClaimingAllowance = false
         var deleteAccountErrorMessage: String?
 
         static let accountDeletionConfirmationPhrase = "delete"
@@ -260,10 +338,49 @@ extension SettingsView {
         private var lastSavedSent: SentNotificationMode?
         private var lastSavedInbound: InboundNotificationMode?
 
-        init(api: APIClient, auth: AuthProviding, push: PushNotificationsProviding) {
+        init(
+            api: APIClient,
+            auth: AuthProviding,
+            push: PushNotificationsProviding,
+            entitlementsService: EntitlementsProviding = AppServices.entitlements
+        ) {
             self.api = api
             self.auth = auth
             self.push = push
+            self.entitlementsService = entitlementsService
+        }
+
+        var entitlements: UserEntitlements? {
+            entitlementsService.entitlements
+        }
+
+        var isSubscriber: Bool {
+            entitlements?.isSubscriber == true
+        }
+
+        var planTitle: String {
+            entitlements?.planTitle ?? PromoText.planUnknown
+        }
+
+        var accountFooterText: String {
+            if isSubscriber {
+                return PromoText.accountFooterPlus
+            }
+            return PromoText.accountFooterFree
+        }
+
+        var availableSentModes: [SentNotificationMode] {
+            allowedSentModes.isEmpty ? [.destinationOnly] : allowedSentModes
+        }
+
+        var availableInboundModes: [InboundNotificationMode] {
+            allowedInboundModes.isEmpty ? [.arrivalOnly] : allowedInboundModes
+        }
+
+        var showsNotificationUpgradePrompt: Bool {
+            !isSubscriber
+                && (allowedSentModes.count < SentNotificationMode.allCases.count
+                    || allowedInboundModes.count < InboundNotificationMode.allCases.count)
         }
 
         var isRegistered: Bool {
@@ -317,16 +434,13 @@ extension SettingsView {
             "\(sentMode.footer) \(inboundMode.footer)"
         }
 
-        var registeredTokenPreview: String? {
-            registeredSummary?.token
-        }
-
         @MainActor
         func refresh() async {
             await push.refreshAuthorizationStatus()
             authorizationStatus = push.authorizationStatus
             errorMessage = nil
 
+            await entitlementsService.refresh()
             await refreshPreferences()
 
             do {
@@ -349,13 +463,44 @@ extension SettingsView {
 
             do {
                 let preferences = try await api.getNotificationPreferences()
-                sentMode = preferences.sent
-                inboundMode = preferences.inbound
-                lastSavedSent = preferences.sent
-                lastSavedInbound = preferences.inbound
+                applyPreferences(preferences)
             } catch {
-                // Preferences are optional until the device is signed in with a working API.
+                if let entitlements {
+                    allowedSentModes = entitlements.notification.allowedSentModes
+                    allowedInboundModes = entitlements.notification.allowedInboundModes
+                }
             }
+        }
+
+        @MainActor
+        func claimStampAllowance() async {
+            isClaimingAllowance = true
+            errorMessage = nil
+            defer { isClaimingAllowance = false }
+
+            do {
+                _ = try await entitlementsService.claimStampAllowance()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+
+        @MainActor
+        private func applyPreferences(_ preferences: NotificationPreferencesSummary) {
+            allowedSentModes = preferences.allowedSentModes
+            allowedInboundModes = preferences.allowedInboundModes
+
+            let resolvedSent = preferences.effectiveSent
+                ?? (allowedSentModes.contains(preferences.sent) ? preferences.sent : allowedSentModes.first)
+                ?? .destinationOnly
+            let resolvedInbound = preferences.effectiveInbound
+                ?? (allowedInboundModes.contains(preferences.inbound) ? preferences.inbound : allowedInboundModes.first)
+                ?? .arrivalOnly
+
+            sentMode = resolvedSent
+            inboundMode = resolvedInbound
+            lastSavedSent = resolvedSent
+            lastSavedInbound = resolvedInbound
         }
 
         @MainActor
@@ -372,10 +517,7 @@ extension SettingsView {
                     sent: sentMode,
                     inbound: inboundMode
                 )
-                sentMode = preferences.sent
-                inboundMode = preferences.inbound
-                lastSavedSent = preferences.sent
-                lastSavedInbound = preferences.inbound
+                applyPreferences(preferences)
             } catch {
                 errorMessage = error.localizedDescription
                 if let lastSavedSent {
@@ -441,6 +583,7 @@ extension SettingsView {
             push.clearLocalRegistration(userOptedOut: false)
             registeredSummary = nil
             showSuccess = false
+            entitlementsService.clear()
             try? auth.signOut()
         }
 
@@ -457,6 +600,7 @@ extension SettingsView {
                 push.clearLocalRegistration(userOptedOut: false)
                 registeredSummary = nil
                 showSuccess = false
+                entitlementsService.clear()
                 try? auth.signOut()
                 return true
             } catch {

@@ -3,6 +3,7 @@ import SwiftUI
 struct ClaimMailboxView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewmodel: ViewModel
+    @State private var isPaywallPresented = false
     private let loadsOnAppear: Bool
 
     init(
@@ -15,16 +16,18 @@ struct ClaimMailboxView: View {
 
     var body: some View {
         Group {
-            if let selectedPostOffice = viewmodel.selectedPostOffice {
+            if viewmodel.isAtMailboxLimit {
+                mailboxLimitReached
+            } else if let selectedPostOffice = viewmodel.selectedPostOffice {
                 claimConfirmation(for: selectedPostOffice)
             } else {
                 postOfficeList
             }
         }
-        .navigationTitle(viewmodel.selectedPostOffice?.name ?? "Claim Mailbox")
+        .navigationTitle(viewmodel.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if viewmodel.selectedPostOffice != nil {
+            if viewmodel.selectedPostOffice != nil, !viewmodel.isAtMailboxLimit {
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         Task { await viewmodel.claim() }
@@ -52,12 +55,37 @@ struct ClaimMailboxView: View {
                 Text("\(mailbox.label)\n\(mailbox.locationLabel)")
             }
         }
+        .task {
+            guard loadsOnAppear else { return }
+            await viewmodel.refreshEntitlements()
+        }
         .task(id: viewmodel.searchText) {
             guard loadsOnAppear else { return }
-            guard viewmodel.selectedPostOffice == nil else { return }
+            guard viewmodel.selectedPostOffice == nil, !viewmodel.isAtMailboxLimit else { return }
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
             await viewmodel.searchPostOffices()
+        }
+        .sheet(isPresented: $isPaywallPresented) {
+            PlusPaywallSheet {
+                Task { await viewmodel.refreshEntitlements() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mailboxLimitReached: some View {
+        ContentUnavailableView {
+            Label(PromoText.mailboxLimitReachedTitle, systemImage: "tray.full")
+        } description: {
+            Text(viewmodel.mailboxLimitMessage)
+        } actions: {
+            if !viewmodel.isSubscriber {
+                Button(PromoText.upgradeToPlus) {
+                    isPaywallPresented = true
+                }
+                .buttonStyle(.borderedProminent)
+            }
         }
     }
 
@@ -105,7 +133,7 @@ struct ClaimMailboxView: View {
             } header: {
                 Text("Post Office")
             } footer: {
-                Text("A free mailbox at this post office will be assigned to you.")
+                Text(viewmodel.claimFooterText)
             }
 
             if viewmodel.isClaiming {
@@ -122,6 +150,11 @@ struct ClaimMailboxView: View {
                 Section {
                     Text(errorMessage)
                         .foregroundStyle(.red)
+                    if viewmodel.showsUpgradeOnError {
+                        Button(PromoText.upgradeToPlus) {
+                            isPaywallPresented = true
+                        }
+                    }
                 }
             }
         }
@@ -132,6 +165,7 @@ extension ClaimMailboxView {
     @Observable
     class ViewModel {
         let api: APIClient
+        let entitlementsService: EntitlementsProviding
 
         var searchText = ""
         var postOffices: [PostOffice] = []
@@ -143,8 +177,51 @@ extension ClaimMailboxView {
         var isClaiming = false
         var errorMessage: String?
         var showSuccess = false
+        var showsUpgradeOnError = false
+
+        var entitlements: UserEntitlements? {
+            entitlementsService.entitlements
+        }
+
+        var isSubscriber: Bool {
+            entitlements?.isSubscriber == true
+        }
+
+        var isAtMailboxLimit: Bool {
+            guard let entitlements else { return false }
+            return !entitlements.canClaimAnotherMailbox
+        }
+
+        var navigationTitle: String {
+            if isAtMailboxLimit {
+                return PromoText.mailboxLimitTitle
+            }
+            return selectedPostOffice?.name ?? "Claim Mailbox"
+        }
+
+        var mailboxLimitMessage: String {
+            guard let entitlements else {
+                return PromoText.mailboxLimitReachedFallback
+            }
+            return PromoText.mailboxLimitReached(
+                owned: entitlements.ownedMailboxes,
+                limit: entitlements.mailboxLimit,
+                isSubscriber: isSubscriber
+            )
+        }
+
+        var claimFooterText: String {
+            if let entitlements {
+                return PromoText.claimMailboxFooter(
+                    owned: entitlements.ownedMailboxes,
+                    limit: entitlements.mailboxLimit
+                )
+            }
+            return PromoText.claimMailboxFooterFallback
+        }
 
         var canClaim: Bool {
+            guard !isAtMailboxLimit else { return false }
             guard let postOffice = selectedPostOffice else { return false }
             return PostOfficeValidation.isValidID(postOffice.id) && !isClaiming
         }
@@ -153,18 +230,29 @@ extension ClaimMailboxView {
             isLoadingPostOffices && !hasLoadedPostOffices
         }
 
-        init(api: APIClient) {
+        init(
+            api: APIClient,
+            entitlementsService: EntitlementsProviding = AppServices.entitlements
+        ) {
             self.api = api
+            self.entitlementsService = entitlementsService
+        }
+
+        @MainActor
+        func refreshEntitlements() async {
+            await entitlementsService.refresh()
         }
 
         func selectPostOffice(_ office: PostOffice) {
             selectedPostOffice = office
             errorMessage = nil
+            showsUpgradeOnError = false
         }
 
         func clearSelection() {
             selectedPostOffice = nil
             errorMessage = nil
+            showsUpgradeOnError = false
         }
 
         func searchPostOffices() async {
@@ -199,17 +287,31 @@ extension ClaimMailboxView {
                 errorMessage = MailboxLookupError.invalidPostOfficeID(postOffice.id).localizedDescription
                 return
             }
+            guard !isAtMailboxLimit else {
+                errorMessage = mailboxLimitMessage
+                showsUpgradeOnError = !isSubscriber
+                return
+            }
 
             isClaiming = true
             errorMessage = nil
+            showsUpgradeOnError = false
             defer { isClaiming = false }
 
             do {
                 let mailbox = try await api.claimMailbox(postOfficeID: postOffice.id)
                 claimedMailbox = mailbox
+                if let service = entitlementsService as? EntitlementsService {
+                    await MainActor.run { service.applyLocalMailboxClaim() }
+                }
+                await entitlementsService.refresh()
                 showSuccess = true
             } catch {
                 errorMessage = error.localizedDescription
+                if case let APIError.httpStatus(code, _) = error, code == 429 {
+                    showsUpgradeOnError = !isSubscriber
+                    await entitlementsService.refresh()
+                }
             }
         }
     }
