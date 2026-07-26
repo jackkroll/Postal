@@ -13,6 +13,7 @@ enum APIEndpoint {
     case meNotificationPreferences
     case updateNotificationPreferences
     case meEntitlements
+    case meLimits
     case claimStampAllowance
     case meInboundLetters(status: ShipmentStatus?, limit: Int?)
     case meMailboxInboundLetters(mailboxID: String, status: ShipmentStatus?, limit: Int?)
@@ -50,6 +51,8 @@ enum APIEndpoint {
             return "/api/me/notification-preferences"
         case .meEntitlements:
             return "/api/me/entitlements"
+        case .meLimits:
+            return "/api/me/limits"
         case .claimStampAllowance:
             return "/api/me/stamps/allowance/claim"
         case .meInboundLetters:

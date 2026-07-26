@@ -55,6 +55,7 @@ struct LetterCreationView: View {
     @State private var viewmodel: ViewModel
     @State private var pendingClaimBoxNavigation = false
     @State private var isPaywallPresented = false
+    @State private var paywallSource: PaywallSource = .stampPhase
     private let loadsOnAppear: Bool
 
     init(
@@ -71,7 +72,10 @@ struct LetterCreationView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                LetterCreationCaption(viewmodel: viewmodel)
+                LetterCreationCaption(
+                    viewmodel: viewmodel,
+                    onUpgrade: { presentPaywall(source: .stampPhase) }
+                )
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
                     .padding(.bottom, 10)
@@ -82,7 +86,14 @@ struct LetterCreationView: View {
                 LetterCreationStage(viewmodel: viewmodel)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                LetterCreationChrome(viewmodel: viewmodel)
+                LetterCreationChrome(
+                    viewmodel: viewmodel,
+                    onUpgrade: { presentPaywall(source: .stampPhase) },
+                    onClaim: {
+                        MonetizationAnalytics.claimTapped(source: .stampPhase)
+                        Task { await viewmodel.claimStampAllowance() }
+                    }
+                )
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
                     .frame(maxWidth: .infinity)
@@ -160,12 +171,13 @@ struct LetterCreationView: View {
                 if viewmodel.needsStamps {
                 if viewmodel.canClaimStampAllowance {
                     Button(PromoText.claimFreeStamps) {
+                        MonetizationAnalytics.claimTapped(source: .sendAlert)
                         Task { await viewmodel.claimStampAllowance() }
                     }
                 }
                 Button(PromoText.upgradeToPlus) {
                     viewmodel.sendErrorMessage = nil
-                    isPaywallPresented = true
+                    presentPaywall(source: .sendAlert)
                 }
                 Button("OK", role: .cancel) {
                     viewmodel.retryStampPhase()
@@ -190,10 +202,16 @@ struct LetterCreationView: View {
             Text(viewmodel.loadErrorMessage ?? "")
         }
         .sheet(isPresented: $isPaywallPresented) {
-            PlusPaywallSheet {
+            PlusPaywallSheet(source: paywallSource) {
                 Task { await viewmodel.refreshEntitlements() }
             }
         }
+    }
+
+    private func presentPaywall(source: PaywallSource) {
+        MonetizationAnalytics.upgradeTapped(source: source)
+        paywallSource = source
+        isPaywallPresented = true
     }
 }
 
@@ -238,6 +256,7 @@ private struct LetterComposerDestination: View {
 
 private struct LetterCreationCaption: View {
     @Bindable var viewmodel: LetterCreationView.ViewModel
+    var onUpgrade: () -> Void
 
     var body: some View {
         VStack(spacing: 4) {
@@ -252,6 +271,10 @@ private struct LetterCreationCaption: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if viewmodel.showsEarlyStampChip, let chip = viewmodel.stampChipContent {
+                StampBalanceChip(content: chip, onUpgrade: onUpgrade)
+                    .padding(.top, 4)
+            }
             if viewmodel.phase == .letterType, viewmodel.draftSaveStatus != .hidden {
                 DraftSaveStatusLabel(status: viewmodel.draftSaveStatus)
                     .padding(.top, 2)
@@ -262,6 +285,41 @@ private struct LetterCreationCaption: View {
         .frame(minHeight: 44, alignment: .center)
         .animation(LetterCreationMotion.soft, value: viewmodel.phase)
         .animation(LetterCreationMotion.soft, value: viewmodel.draftSaveStatus)
+        .animation(LetterCreationMotion.soft, value: viewmodel.stampBalanceLabel)
+    }
+}
+
+/// Compact stamp balance for compose phases before the stamp step.
+private struct StampBalanceChip: View {
+    let content: LetterCreationView.ViewModel.StampChipContent
+    var onUpgrade: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Label(content.label, systemImage: LetterCreationAsset.envelope.systemName)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(content.isWarning ? Color.orange : Color.secondary)
+                .labelStyle(.titleAndIcon)
+
+            if let detail = content.detail {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if content.showsUpgrade {
+                Button(PromoText.plusShort, action: onUpgrade)
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color(.secondarySystemFill))
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -384,6 +442,8 @@ private struct LetterCreationStage: View {
 
 private struct LetterCreationChrome: View {
     @Bindable var viewmodel: LetterCreationView.ViewModel
+    var onUpgrade: () -> Void
+    var onClaim: () -> Void
 
     var body: some View {
         switch viewmodel.phase {
@@ -403,9 +463,7 @@ private struct LetterCreationChrome: View {
 
                 if viewmodel.needsStampsBeforeSend {
                     if viewmodel.canClaimStampAllowance {
-                        Button {
-                            Task { await viewmodel.claimStampAllowance() }
-                        } label: {
+                        Button(action: onClaim) {
                             if viewmodel.isClaimingAllowance {
                                 ProgressView()
                             } else {
@@ -415,11 +473,22 @@ private struct LetterCreationChrome: View {
                         .buttonStyle(.borderedProminent)
                         .frame(maxWidth: .infinity)
                         .disabled(viewmodel.isClaimingAllowance)
-                    } else {
-                        Text(PromoText.outOfStamps)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+
+                        Button(PromoText.upgradeToPlus, action: onUpgrade)
+                            .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
+                    } else {
+                        Button(PromoText.upgradeToPlus, action: onUpgrade)
+                            .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity)
+
+                        if let nextClaim = viewmodel.nextStampClaimLabel {
+                            Text(nextClaim)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
 
@@ -548,9 +617,16 @@ private struct OriginMailboxPickerSheet: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                if #available(iOS 26.0, *) {
+                    ToolbarItem {
+                        Button(role: .cancel, action: { dismiss() })
+                    }
+                } else {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
                 }
+                
             }
         }
         .presentationDetents([.medium, .large])
@@ -786,6 +862,72 @@ extension LetterCreationView {
                 return PromoText.unlimitedSendsWithPlus
             }
             return PromoText.stampBalance(entitlements.stampBalance)
+        }
+
+        var nextStampClaimLabel: String? {
+            guard let nextClaim = entitlements?.allowance.nextClaimAt, !nextClaim.isEmpty else {
+                return nil
+            }
+            return PromoText.nextFreeStampClaim(at: nextClaim)
+        }
+
+        /// Shown from destination through compose so users know balance before the stamp step.
+        var showsEarlyStampChip: Bool {
+            switch phase {
+            case .destination, .returnAddress, .letterType, .compose:
+                return stampChipContent != nil
+            default:
+                return false
+            }
+        }
+
+        struct StampChipContent: Equatable {
+            var label: String
+            var detail: String?
+            var isWarning: Bool
+            var showsUpgrade: Bool
+        }
+
+        var stampChipContent: StampChipContent? {
+            guard let entitlements else { return nil }
+            if entitlements.unlimitedSends {
+                return StampChipContent(
+                    label: PromoText.unlimitedSends,
+                    detail: nil,
+                    isWarning: false,
+                    showsUpgrade: false
+                )
+            }
+
+            let balance = PromoText.stampBalance(entitlements.stampBalance)
+            let costDetail: String? = entitlements.stampsPerSend > 1
+                ? PromoText.stampsPerSend(entitlements.stampsPerSend)
+                : nil
+
+            if entitlements.hasStampsToSend {
+                return StampChipContent(
+                    label: balance,
+                    detail: costDetail,
+                    isWarning: false,
+                    showsUpgrade: false
+                )
+            }
+
+            if canClaimStampAllowance {
+                return StampChipContent(
+                    label: PromoText.claimStampsToSend,
+                    detail: balance,
+                    isWarning: true,
+                    showsUpgrade: false
+                )
+            }
+
+            return StampChipContent(
+                label: PromoText.outOfStamps,
+                detail: nextStampClaimLabel,
+                isWarning: true,
+                showsUpgrade: true
+            )
         }
 
         /// Server-configurable ceilings; read through the provider so a refresh propagates.
@@ -1184,6 +1326,7 @@ extension LetterCreationView {
             guard phase == .stamp, canSend, !isStampApplied, !isSending else { return }
 
             if needsStampsBeforeSend {
+                MonetizationAnalytics.sendBlockedNoStamps()
                 needsStamps = true
                 sendErrorMessage = canClaimStampAllowance
                     ? PromoText.notEnoughStampsClaimOrUpgrade

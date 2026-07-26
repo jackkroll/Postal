@@ -10,7 +10,7 @@ enum AppConfiguration {
     /// RevenueCat virtual currency code for postage stamps.
     static let stampVirtualCurrencyCode = "stamps"
 
-    /// Baked-in letter size ceilings, used until the API serves them.
+    /// Fallback letter size ceilings when `GET /api/me/limits` is unavailable.
     static let letterLimits = LetterLimits(
         maxTextBytes: 65_536,
         maxDrawingBytes: 4 * 1_024 * 1_024

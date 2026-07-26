@@ -52,15 +52,23 @@ private struct ComposeEditor: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .transaction { $0.animation = nil }
 
-            HStack {
-                Text(viewmodel.byteCountLabel)
-                    .font(.caption)
-                    .foregroundStyle(viewmodel.isOverByteLimit ? .red : .secondary)
-                Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                LetterLimitsProgressBar(
+                    byteCount: viewmodel.letterByteCount,
+                    kind: .text,
+                    limits: viewmodel.limits
+                )
                 if viewmodel.letterText.isEmpty {
                     Text("Required")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else if viewmodel.isOverByteLimit {
+                    Label(
+                        viewmodel.limits.overLimitMessage(for: .text),
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.red)
                 }
             }
             .padding(.horizontal, 16)
@@ -125,10 +133,6 @@ extension ComposeView {
             !isSending
             && !trimmed(letterText).isEmpty
             && !isOverByteLimit
-        }
-
-        var byteCountLabel: String {
-            limits.usageLabel(letterByteCount, for: .text)
         }
 
         private func trimmed(_ value: String) -> String {

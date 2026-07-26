@@ -15,6 +15,8 @@ enum PromoText {
     static let moreMailboxes = "More Mailboxes"
     static let claimFreeStamps = "Claim Free Stamps"
     static let unlockShipmentDetails = "Unlock shipment details with Plus"
+    static let claimStampsToSend = "Claim stamps to send"
+    static let plusShort = "Plus"
 
     static func claimFreeStamps(amount: Int) -> String {
         if amount > 1 {
@@ -35,9 +37,18 @@ enum PromoText {
     static let accountFooterFree =
         "Free accounts get a periodic stamp allowance. Plus unlocks unlimited sends, more mailboxes, and detailed notifications."
 
+    static func stampsPerSend(_ count: Int) -> String {
+        "\(count) stamp\(count == 1 ? "" : "s") per send"
+    }
+
+    static func letterSizeCeilings(textLabel: String, drawingLabel: String) -> String {
+        "Text \(textLabel) · Drawing \(drawingLabel)"
+    }
+
     // MARK: Stamps
 
     static let unlimitedSendsWithPlus = "Unlimited sends with Plus"
+    static let unlimitedSends = "Unlimited"
     static let outOfStamps = "You're out of stamps."
 
     static func stampBalance(_ count: Int) -> String {

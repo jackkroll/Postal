@@ -58,6 +58,7 @@ struct AddressBook: View {
             } else if !isSelecting, viewmodel.showsMailboxUpgrade {
                 ToolbarItem(placement: .bottomBar) {
                     Button {
+                        MonetizationAnalytics.upgradeTapped(source: .mailboxLimit)
                         viewmodel.isPaywallPresented = true
                     } label: {
                         Label(PromoText.moreMailboxes, systemImage: "star.fill")
@@ -78,7 +79,7 @@ struct AddressBook: View {
             .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $viewmodel.isPaywallPresented) {
-            PlusPaywallSheet {
+            PlusPaywallSheet(source: .mailboxLimit) {
                 Task { await viewmodel.refresh() }
             }
         }
@@ -151,6 +152,7 @@ struct MyMailboxesSection: View {
                         .buttonStyle(.borderedProminent)
                     } else if viewmodel.showsMailboxUpgrade {
                         Button(PromoText.upgradeToPlus) {
+                            MonetizationAnalytics.upgradeTapped(source: .mailboxLimit)
                             viewmodel.isPaywallPresented = true
                         }
                         .buttonStyle(.borderedProminent)

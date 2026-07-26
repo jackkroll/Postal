@@ -78,7 +78,7 @@
           ],
           "localizations" : [
             {
-              "description" : "Access unlimited stamps, larger letters, and more",
+              "description" : "Access unlimited stamps, more mailboxes, and detailed notifications",
               "displayName" : "Annual",
               "locale" : "en_US"
             }
@@ -117,7 +117,7 @@
           ],
           "localizations" : [
             {
-              "description" : "Access unlimited stamps, larger letters, and more",
+              "description" : "Access unlimited stamps, more mailboxes, and detailed notifications",
               "displayName" : "Monthly",
               "locale" : "en_US"
             }

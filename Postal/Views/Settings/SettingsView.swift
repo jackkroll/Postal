@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State var viewmodel: ViewModel
     @State private var isDeleteAccountPresented = false
     @State private var isPaywallPresented = false
+    @State private var paywallSource: PaywallSource = .settings
     @State private var isCustomerCenterPresented = false
     private let loadsOnAppear: Bool
 
@@ -28,13 +29,24 @@ struct SettingsView: View {
                             ? "Unlimited"
                             : "\(entitlements.stampBalance)"
                     )
+                    if !entitlements.unlimitedSends {
+                        LabeledContent(
+                            "Cost",
+                            value: PromoText.stampsPerSend(entitlements.stampsPerSend)
+                        )
+                    }
                     LabeledContent(
                         "Mailboxes",
                         value: "\(entitlements.ownedMailboxes) / \(entitlements.mailboxLimit)"
                     )
+                    LabeledContent(
+                        "Letter size",
+                        value: viewmodel.letterSizeSummary
+                    )
 
                     if entitlements.allowance.claimable {
                         Button {
+                            MonetizationAnalytics.claimTapped(source: .settings)
                             Task { await viewmodel.claimStampAllowance() }
                         } label: {
                             if viewmodel.isClaimingAllowance {
@@ -66,7 +78,7 @@ struct SettingsView: View {
                     }
                 } else {
                     Button {
-                        isPaywallPresented = true
+                        presentPaywall(source: .settings)
                     } label: {
                         Label(PromoText.upgradeToPlus, systemImage: "star.fill")
                     }
@@ -135,7 +147,7 @@ struct SettingsView: View {
 
                 if viewmodel.showsNotificationUpgradePrompt {
                     Button {
-                        isPaywallPresented = true
+                        presentPaywall(source: .notifications)
                     } label: {
                         Label(PromoText.unlockShipmentDetails, systemImage: "star.fill")
                     }
@@ -175,6 +187,7 @@ struct SettingsView: View {
                 }
             }
 
+            #if DEBUG
             Section {
                 NavigationLink {
                     PurchasesDebugView()
@@ -186,6 +199,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Firebase UID, RC app user ID, alignment, entitlements, and STAMP balance.")
             }
+            #endif
 
             Section {
                 Button(role: .destructive) {
@@ -217,13 +231,19 @@ struct SettingsView: View {
             }
         }
         .sheet(isPresented: $isPaywallPresented) {
-            PlusPaywallSheet {
+            PlusPaywallSheet(source: paywallSource) {
                 Task { await viewmodel.refresh() }
             }
         }
         .presentCustomerCenter(isPresented: $isCustomerCenterPresented, onDismiss: {
             Task { await viewmodel.refresh() }
         })
+    }
+
+    private func presentPaywall(source: PaywallSource) {
+        MonetizationAnalytics.upgradeTapped(source: source)
+        paywallSource = source
+        isPaywallPresented = true
     }
 }
 
@@ -290,11 +310,17 @@ private struct DeleteAccountConfirmationSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if #available(iOS 26.0, *) {
-                        Button(role: .cancel) { dismiss() }
-                            .disabled(viewmodel.isDeletingAccount)
+                        Button(role: .cancel) {
+                            dismiss()
+                        }
+                        .disabled(viewmodel.isDeletingAccount)
                     } else {
-                        Button("Cancel") { dismiss() }
-                            .disabled(viewmodel.isDeletingAccount)
+                        Button {
+                            dismiss()
+                        } label: {
+                            Label("Cancel", systemImage: "xmark")
+                        }
+                        .disabled(viewmodel.isDeletingAccount)
                     }
                 }
             }
@@ -315,6 +341,7 @@ extension SettingsView {
         let auth: AuthProviding
         let push: PushNotificationsProviding
         let entitlementsService: EntitlementsProviding
+        let limitsProvider: LetterLimitsProviding
 
         var authorizationStatus: UNAuthorizationStatus = .notDetermined
         var registeredSummary: DeviceTokenSummary?
@@ -342,16 +369,26 @@ extension SettingsView {
             api: APIClient,
             auth: AuthProviding,
             push: PushNotificationsProviding,
-            entitlementsService: EntitlementsProviding = AppServices.entitlements
+            entitlementsService: EntitlementsProviding = AppServices.entitlements,
+            limitsProvider: LetterLimitsProviding = AppServices.letterLimits
         ) {
             self.api = api
             self.auth = auth
             self.push = push
             self.entitlementsService = entitlementsService
+            self.limitsProvider = limitsProvider
         }
 
         var entitlements: UserEntitlements? {
             entitlementsService.entitlements
+        }
+
+        var letterSizeSummary: String {
+            let limits = limitsProvider.limits
+            return PromoText.letterSizeCeilings(
+                textLabel: limits.formattedCeiling(for: .text),
+                drawingLabel: limits.formattedCeiling(for: .drawing)
+            )
         }
 
         var isSubscriber: Bool {
@@ -441,6 +478,7 @@ extension SettingsView {
             errorMessage = nil
 
             await entitlementsService.refresh()
+            await limitsProvider.refresh()
             await refreshPreferences()
 
             do {
@@ -584,6 +622,7 @@ extension SettingsView {
             registeredSummary = nil
             showSuccess = false
             entitlementsService.clear()
+            AppServices.letterLimits.clear()
             try? auth.signOut()
         }
 
@@ -601,6 +640,7 @@ extension SettingsView {
                 registeredSummary = nil
                 showSuccess = false
                 entitlementsService.clear()
+                AppServices.letterLimits.clear()
                 try? auth.signOut()
                 return true
             } catch {

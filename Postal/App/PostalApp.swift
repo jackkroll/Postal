@@ -91,7 +91,9 @@ struct PostalApp: App {
                 if !AppServices.purchasesIdentity.isAligned(with: uid) {
                     let aligned = await AppServices.purchasesIdentity.sync(firebaseUserID: uid)
                     if aligned, uid != nil {
-                        await AppServices.entitlements.refresh()
+                        async let entitlementsRefresh: Void = AppServices.entitlements.refresh()
+                        async let limitsRefresh: Void = AppServices.letterLimits.refresh()
+                        _ = await (entitlementsRefresh, limitsRefresh)
                     }
                 }
             }

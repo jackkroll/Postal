@@ -67,7 +67,7 @@ struct ClaimMailboxView: View {
             await viewmodel.searchPostOffices()
         }
         .sheet(isPresented: $isPaywallPresented) {
-            PlusPaywallSheet {
+            PlusPaywallSheet(source: .mailboxLimit) {
                 Task { await viewmodel.refreshEntitlements() }
             }
         }
@@ -82,6 +82,7 @@ struct ClaimMailboxView: View {
         } actions: {
             if !viewmodel.isSubscriber {
                 Button(PromoText.upgradeToPlus) {
+                    MonetizationAnalytics.upgradeTapped(source: .mailboxLimit)
                     isPaywallPresented = true
                 }
                 .buttonStyle(.borderedProminent)
@@ -152,6 +153,7 @@ struct ClaimMailboxView: View {
                         .foregroundStyle(.red)
                     if viewmodel.showsUpgradeOnError {
                         Button(PromoText.upgradeToPlus) {
+                            MonetizationAnalytics.upgradeTapped(source: .mailboxLimit)
                             isPaywallPresented = true
                         }
                     }
