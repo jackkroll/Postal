@@ -24,7 +24,7 @@
     "_developerTeamID" : "ZS9H682SJQ",
     "_disableDialogs" : false,
     "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 806698172.87523603,
+    "_lastSynchronizedDate" : 806792278.60036302,
     "_locale" : "en_US",
     "_renewalBillingIssuesEnabled" : false,
     "_storefront" : "USA",
@@ -49,7 +49,7 @@
           "adHocOffers" : [
             {
               "billingPlanType" : "BILLED_UPFRONT",
-              "internalID" : "2737EBB3",
+              "internalID" : "1E876B05",
               "numberOfPeriods" : 1,
               "offerID" : "annual_trial",
               "paymentMode" : "free",
@@ -78,7 +78,7 @@
           ],
           "localizations" : [
             {
-              "description" : "Access unlimited stamps, more mailboxes, and detailed notifications",
+              "description" : "Access unlimited stamps, larger letters, and more",
               "displayName" : "Annual",
               "locale" : "en_US"
             }
@@ -117,7 +117,7 @@
           ],
           "localizations" : [
             {
-              "description" : "Access unlimited stamps, more mailboxes, and detailed notifications",
+              "description" : "Access unlimited stamps, larger letters, and more",
               "displayName" : "Monthly",
               "locale" : "en_US"
             }

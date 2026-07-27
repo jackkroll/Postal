@@ -51,9 +51,6 @@
             ReferencedContainer = "container:Postal.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <StoreKitConfigurationFileReference
-         identifier = "../../Postal/Penpal: Write &amp; Send Letters.storekit">
-      </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Top chrome shared by write and draw composer pages: draft chip + usage meter.
+/// Top chrome shared by write and draw composer pages: usage meter (+ draft on older OS).
 struct LetterComposerStatusBar: View {
     @Binding var draftSaveStatus: DraftSaveStatus
     let byteCount: Int
@@ -15,18 +15,31 @@ struct LetterComposerStatusBar: View {
         limits.usageFraction(byteCount, for: kind)
     }
 
+    /// Draft status uses toolbar `.subtitle` on iOS 26+.
+    private var showsInlineDraftStatus: Bool {
+        if #available(iOS 26.0, *) {
+            return false
+        }
+        return true
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
-                DraftSaveStatusLabel(status: draftSaveStatus)
+                if showsInlineDraftStatus {
+                    DraftSaveStatusLabel(status: draftSaveStatus)
+                }
                 Spacer(minLength: 0)
                 LetterLimitsProgressBar(byteCount: byteCount, kind: kind, limits: limits)
             }
             HStack(alignment: .center) {
                 if isOverLimit {
-                    Label(limits.overLimitMessage(for: kind), systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.red)
+                    Label(
+                        limits.overLimitMessage(byteCount: byteCount, for: kind),
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.red)
                 } else if fraction >= 0.8 {
                     Text(limits.formattedUsage(byteCount: byteCount, for: kind))
                         .font(.caption2)
@@ -36,7 +49,6 @@ struct LetterComposerStatusBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
-        .animation(.snappy(duration: 0.2), value: draftSaveStatus)
         .animation(.snappy(duration: 0.2), value: isOverLimit)
         .animation(.snappy(duration: 0.2), value: byteCount)
     }

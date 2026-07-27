@@ -4,9 +4,17 @@ enum DraftSaveStatus: Equatable {
     case hidden
     case saving
     case saved
+
+    var accessibilityLabel: String {
+        switch self {
+        case .hidden: return ""
+        case .saving: return "Saving draft"
+        case .saved: return "Draft saved"
+        }
+    }
 }
 
-/// Compact status chip so write/draw composers can show draft persistence confidence.
+/// Quiet draft persistence notice for composers and letter creation chrome.
 struct DraftSaveStatusLabel: View {
     let status: DraftSaveStatus
 
@@ -14,30 +22,29 @@ struct DraftSaveStatusLabel: View {
         Group {
             switch status {
             case .hidden:
-                EmptyView()
+                Color.clear
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
             case .saving:
-                Label("Saving draft…", systemImage: "ellipsis.circle")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption.weight(.medium))
-                    .accessibilityLabel("Saving draft")
-                    .padding(10)
-                    .background(.blue.opacity(0.25))
-                    .clipShape(.capsule)
+                label("Saving", systemImage: "arrow.down.document.fill")
             case .saved:
-                Label("Draft saved", systemImage: "checkmark.circle.fill")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption.weight(.medium))
-                    .accessibilityLabel("Draft saved")
-                    .padding(10)
-                    .background(.green.opacity(0.25))
-                    .clipShape(.capsule)
+                label("Saved", systemImage: "checkmark")
             }
         }
-        .contentTransition(.opacity)
-        .animation(.snappy(duration: 0.2), value: status)
+        .accessibilityLabel(status.accessibilityLabel)
+        // Force toolbar subtitle content to refresh when status flips.
+        .id(status)
+    }
+
+    private func label(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
-#Preview("Saved"){
+
+#Preview("Saved") {
     DraftSaveStatusLabel(status: .saved)
 }
 

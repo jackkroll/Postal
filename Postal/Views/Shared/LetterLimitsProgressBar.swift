@@ -23,8 +23,9 @@ struct LetterLimitsProgressBar: View {
             .tint(isOverLimit ? Color.red : Color.accentColor)
             .accessibilityLabel("Letter size")
             .accessibilityValue(
-                "\(limits.formattedUsage(byteCount: byteCount, for: kind))"
-                    + (isOverLimit ? ", over limit" : "")
+                isOverLimit
+                    ? limits.overAmountDescription(byteCount: byteCount, for: kind)
+                    : limits.formattedUsage(byteCount: byteCount, for: kind)
             )
     }
 }

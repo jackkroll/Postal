@@ -384,11 +384,7 @@ extension SettingsView {
         }
 
         var letterSizeSummary: String {
-            let limits = limitsProvider.limits
-            return PromoText.letterSizeCeilings(
-                textLabel: limits.formattedCeiling(for: .text),
-                drawingLabel: limits.formattedCeiling(for: .drawing)
-            )
+            PromoText.letterSizePlanLabel(isSubscriber: limitsProvider.limits.isSubscriber)
         }
 
         var isSubscriber: Bool {

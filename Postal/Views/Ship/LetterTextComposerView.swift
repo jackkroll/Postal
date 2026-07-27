@@ -66,9 +66,17 @@ struct LetterTextComposerView: View {
         .navigationTitle("Write Letter")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if #available(iOS 26.0, *), draftSaveStatus != .hidden {
+                ToolbarItem(id: "draft-save-status", placement: .subtitle) {
+                    DraftSaveStatusLabel(status: draftSaveStatus)
+                }
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") { isFocused = false }
+                Button { isFocused = false } label: {
+                    Label("Hide Keyboard", systemImage: "keyboard.chevron.compact.down.fill")
+                }
+                .padding()
             }
             ToolbarItem(placement: .bottomBar) {
                 Button {

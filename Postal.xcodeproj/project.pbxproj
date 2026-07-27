@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		563792B930129B9F00B90A9C /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 563792B830129B9F00B90A9C /* RevenueCat */; };
 		563792BB30129B9F00B90A9C /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = 563792BA30129B9F00B90A9C /* RevenueCatUI */; };
+		5637938E3016BDB700B90A9C /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5637938D3016BDB700B90A9C /* StoreKit.framework */; };
 		56D3D81930096ED900682844 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 56D3D81830096ED900682844 /* FirebaseAuth */; };
 		56D3D81B30096ED900682844 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 56D3D81A30096ED900682844 /* FirebaseCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		5637938D3016BDB700B90A9C /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		56DB1E9B2FF44C2B00D330D8 /* Postal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Postal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -32,6 +34,7 @@
 			files = (
 				563792BB30129B9F00B90A9C /* RevenueCatUI in Frameworks */,
 				56D3D81B30096ED900682844 /* FirebaseCore in Frameworks */,
+				5637938E3016BDB700B90A9C /* StoreKit.framework in Frameworks */,
 				56D3D81930096ED900682844 /* FirebaseAuth in Frameworks */,
 				563792B930129B9F00B90A9C /* RevenueCat in Frameworks */,
 			);
@@ -43,6 +46,7 @@
 		56C00CFC2FFFF3A7009FA92D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				5637938D3016BDB700B90A9C /* StoreKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -285,6 +289,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Supporting/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Postal;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -319,6 +324,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Supporting/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Postal;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

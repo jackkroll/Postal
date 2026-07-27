@@ -42,24 +42,31 @@ struct CanvasView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            LetterComposerStatusBar(
-                draftSaveStatus: $draftSaveStatus,
-                byteCount: drawingByteCount,
-                kind: .drawing,
-                limits: limits
-            )
-
             CanvasUIView(
                 canvasView: $canvas,
                 toolPicker: $toolPicker,
                 isDrawingEmpty: $isDrawingEmpty,
                 onDrawingChange: scheduleDrawingChangeNotification
             )
+            .ignoresSafeArea(.all)
             .background(Color(.systemBackground))
+        }
+        .safeAreaInset(edge: .top) {
+            LetterComposerStatusBar(
+                draftSaveStatus: $draftSaveStatus,
+                byteCount: drawingByteCount,
+                kind: .drawing,
+                limits: limits
+            )
         }
         .navigationTitle("Draw Letter")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if #available(iOS 26.0, *), draftSaveStatus != .hidden {
+                ToolbarItem(id: "draft-save-status", placement: .subtitle) {
+                    DraftSaveStatusLabel(status: draftSaveStatus)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     isToolPickerVisible.toggle()

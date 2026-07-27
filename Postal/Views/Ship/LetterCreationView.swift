@@ -71,37 +71,36 @@ struct LetterCreationView: View {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                LetterCreationCaption(
-                    viewmodel: viewmodel,
-                    onUpgrade: { presentPaywall(source: .stampPhase) }
-                )
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                    .padding(.bottom, 10)
-                    .frame(maxWidth: .infinity)
-                    .background(Color(.systemGroupedBackground))
-                    .zIndex(3)
-                
-                LetterCreationStage(viewmodel: viewmodel)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                LetterCreationChrome(
-                    viewmodel: viewmodel,
-                    onUpgrade: { presentPaywall(source: .stampPhase) },
-                    onClaim: {
-                        MonetizationAnalytics.claimTapped(source: .stampPhase)
-                        Task { await viewmodel.claimStampAllowance() }
-                    }
-                )
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 52)
-                    .background(Color(.systemGroupedBackground))
-                    .zIndex(3)
+            // Laid out in the well between floating caption/chrome (does not ignore
+            // safe area). Camera framing uses that same visible rect.
+            LetterCreationStage(viewmodel: viewmodel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            LetterCreationCaption(
+                viewmodel: viewmodel,
+                onUpgrade: { presentPaywall(source: .stampPhase) }
+            )
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            LetterCreationChrome(
+                viewmodel: viewmodel,
+                onUpgrade: { presentPaywall(source: .stampPhase) },
+                onClaim: {
+                    MonetizationAnalytics.claimTapped(source: .stampPhase)
+                    Task { await viewmodel.claimStampAllowance() }
+                }
+            )
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 52)
+            .background {
+                FloatingChromeScrim(edge: .bottom)
             }
         }
+        .navigationTitle(viewmodel.phaseTitle)
+        .letterCreationNavigationSubtitle(viewmodel.phaseSubtitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard loadsOnAppear else { return }
@@ -252,40 +251,106 @@ private struct LetterComposerDestination: View {
     }
 }
 
+// MARK: - Floating chrome
+
+/// Soft fade behind caption/chrome so controls stay readable while the letter
+/// can still read through at the edges (no hard shelf clipping the stage).
+private struct FloatingChromeScrim: View {
+    enum Edge {
+        case top
+        case bottom
+    }
+
+    let edge: Edge
+
+    var body: some View {
+        LinearGradient(
+            colors: edge == .top
+                ? [Color(.systemGroupedBackground).opacity(0.92), Color(.systemGroupedBackground).opacity(0)]
+                : [Color(.systemGroupedBackground).opacity(0), Color(.systemGroupedBackground).opacity(0.92)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea(.all)
+        .allowsHitTesting(false)
+    }
+}
+
 // MARK: - Caption (phase copy only)
 
 private struct LetterCreationCaption: View {
     @Bindable var viewmodel: LetterCreationView.ViewModel
     var onUpgrade: () -> Void
 
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(viewmodel.phaseTitle)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
-            if !viewmodel.phaseSubtitle.isEmpty {
-                Text(viewmodel.phaseSubtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if viewmodel.showsEarlyStampChip, let chip = viewmodel.stampChipContent {
-                StampBalanceChip(content: chip, onUpgrade: onUpgrade)
-                    .padding(.top, 4)
-            }
-            if viewmodel.phase == .letterType, viewmodel.draftSaveStatus != .hidden {
-                DraftSaveStatusLabel(status: viewmodel.draftSaveStatus)
-                    .padding(.top, 2)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+    /// On iOS 26+, title/subtitle live in the nav bar via `navigationSubtitle`.
+    private var showsInlinePhaseCopy: Bool {
+        if #available(iOS 26.0, *) {
+            return false
         }
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 44, alignment: .center)
-        .animation(LetterCreationMotion.soft, value: viewmodel.phase)
-        .animation(LetterCreationMotion.soft, value: viewmodel.draftSaveStatus)
-        .animation(LetterCreationMotion.soft, value: viewmodel.stampBalanceLabel)
+        return true
+    }
+
+    private var hasAccessories: Bool {
+        if viewmodel.showsEarlyStampChip && viewmodel.stampChipContent != nil {
+            return true
+        }
+        // Draft status uses toolbar `.subtitle` on iOS 26+.
+        if #available(iOS 26.0, *) {
+            return false
+        }
+        return viewmodel.phase == .letterType && viewmodel.draftSaveStatus != .hidden
+    }
+
+    var body: some View {
+        if showsInlinePhaseCopy || hasAccessories {
+            VStack(spacing: 4) {
+                if showsInlinePhaseCopy {
+                    Text(viewmodel.phaseTitle)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                    if !viewmodel.phaseSubtitle.isEmpty {
+                        Text(viewmodel.phaseSubtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if viewmodel.showsEarlyStampChip, let chip = viewmodel.stampChipContent {
+                    StampBalanceChip(content: chip, onUpgrade: onUpgrade)
+                        .padding(.top, showsInlinePhaseCopy ? 4 : 0)
+                }
+                if showsInlinePhaseCopy,
+                   viewmodel.phase == .letterType,
+                   viewmodel.draftSaveStatus != .hidden {
+                    DraftSaveStatusLabel(status: viewmodel.draftSaveStatus)
+                        .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: showsInlinePhaseCopy ? 44 : 0, alignment: .center)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
+            .background {
+                FloatingChromeScrim(edge: .top)
+            }
+            .animation(LetterCreationMotion.soft, value: viewmodel.phase)
+            .animation(LetterCreationMotion.soft, value: viewmodel.stampBalanceLabel)
+        }
+    }
+}
+
+private extension View {
+    /// `navigationSubtitle` is iOS 26+; no-op on earlier OS versions.
+    @ViewBuilder
+    func letterCreationNavigationSubtitle(_ subtitle: String) -> some View {
+        if #available(iOS 26.0, *) {
+            self.navigationSubtitle(subtitle)
+        } else {
+            self
+        }
     }
 }
 
@@ -330,9 +395,11 @@ private struct LetterCreationStage: View {
 
     private static let stageMaxWidth: CGFloat = 500
     private static let stageHorizontalInset: CGFloat = 32
+    /// Small gap inside the caption/chrome well (not a translate-only top offset).
+    private static let wellPadding: CGFloat = 8
 
     var body: some View {
-        // One GeometryReader for available space. Stage fills the viewport (no fixed aspect).
+        // Viewport is the visible well between floating caption/chrome.
         GeometryReader { viewport in
             let stageSize = Self.stageSize(fitting: viewport.size)
 
@@ -349,7 +416,6 @@ private struct LetterCreationStage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .scaleEffect(viewmodel.camera.scale, anchor: .center)
                 .offset(viewmodel.camera.offset)
-                .clipped()
                 .onAppear {
                     viewmodel.updateViewportSize(viewport.size)
                     viewmodel.updateStageSize(stageSize)
@@ -377,13 +443,17 @@ private struct LetterCreationStage: View {
     /// One letter + one envelope for the lifetime of the stage; transforms only.
     private func stableStage(size: CGSize) -> some View {
         let revealed = viewmodel.letterPlacement == .revealed
-        // Keep both objects inside the stage bounds so `.clipped()` doesn't hide the letter.
-        let envelopeHeight = size.height * (revealed ? 0.30 : 0.72)
-        let letterHeight = size.height * (revealed ? 0.78 : 0.48)
+        let usableHeight = max(size.height - Self.wellPadding * 2, 0)
+        let envelopeHeight = usableHeight * (revealed ? 0.30 : 0.78)
+        let letterHeight = usableHeight * (revealed ? 0.88 : 0.52)
         let letterWidth = size.width - 24
-        // Pin content to the top of the stage (small tuck inset when letter is inside).
-        let envelopeOffsetY: CGFloat = revealed ? letterHeight - 28 : 12
-        let letterOffsetY: CGFloat = revealed ? 4 : envelopeOffsetY + envelopeHeight * 0.08
+
+        let envelopeOffsetY: CGFloat = revealed
+            ? Self.wellPadding + letterHeight - 28
+            : Self.wellPadding + max(0, (usableHeight - envelopeHeight) * 0.04)
+        let letterOffsetY: CGFloat = revealed
+            ? Self.wellPadding
+            : envelopeOffsetY + envelopeHeight * 0.08
 
         return ZStack(alignment: .top) {
             LetterSheetView(
@@ -448,19 +518,9 @@ private struct LetterCreationChrome: View {
     var body: some View {
         switch viewmodel.phase {
         case .letterType, .compose:
-            stepNavigationRow(
-                centerPrompt: viewmodel.hasComposedContent ? nil : "Pick an option on the letter",
-                showContinue: viewmodel.hasComposedContent
-            )
+            stepNavigationRow(showContinue: viewmodel.hasComposedContent)
         case .stamp:
             VStack(spacing: 10) {
-                if let stampLabel = viewmodel.stampBalanceLabel {
-                    Text(stampLabel)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                }
-
                 if viewmodel.needsStampsBeforeSend {
                     if viewmodel.canClaimStampAllowance {
                         Button(action: onClaim) {
@@ -481,23 +541,10 @@ private struct LetterCreationChrome: View {
                         Button(PromoText.upgradeToPlus, action: onUpgrade)
                             .buttonStyle(.borderedProminent)
                             .frame(maxWidth: .infinity)
-
-                        if let nextClaim = viewmodel.nextStampClaimLabel {
-                            Text(nextClaim)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: .infinity)
-                        }
                     }
                 }
 
-                stepNavigationRow(
-                    centerPrompt: viewmodel.needsStampsBeforeSend
-                        ? nil
-                        : "Tap the stamp to send",
-                    showContinue: false
-                )
+                stepNavigationRow(showContinue: false)
             }
         case .sending:
             ProgressView("Sending…")
@@ -510,10 +557,10 @@ private struct LetterCreationChrome: View {
                 .buttonStyle(.borderedProminent)
                 .frame(maxWidth: .infinity)
             } else {
-                stepNavigationRow(centerPrompt: nil, showContinue: true)
+                stepNavigationRow(showContinue: true)
             }
         case .destination:
-            stepNavigationRow(centerPrompt: nil, showContinue: true)
+            stepNavigationRow(showContinue: true)
         case .overview:
             ProgressView()
                 .frame(maxWidth: .infinity)
@@ -522,42 +569,28 @@ private struct LetterCreationChrome: View {
         }
     }
 
-    private func stepNavigationRow(centerPrompt: String?, showContinue: Bool) -> some View {
+    private func stepNavigationRow(showContinue: Bool) -> some View {
         HStack(spacing: 12) {
-            Group {
-                if viewmodel.canGoBack {
-                    Button {
-                        viewmodel.enqueueBack()
-                    } label: {
-                        Label("Back", systemImage: "chevron.backward")
-                    }
-                    .buttonStyle(.bordered)
+            if viewmodel.canGoBack {
+                Button {
+                    viewmodel.enqueueBack()
+                } label: {
+                    Label("Back", systemImage: "chevron.backward")
                 }
+                .buttonStyle(.bordered)
             }
 
             Spacer(minLength: 0)
 
-            if let centerPrompt {
-                Text(centerPrompt)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-
-                Spacer(minLength: 0)
-            }
-
-            Group {
-                if showContinue {
-                    Button {
-                        viewmodel.enqueueForward()
-                    } label: {
-                        Label("Continue", systemImage: "chevron.forward")
-                            .labelStyle(SwappedLabelStyle())
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!viewmodel.canAdvance)
+            if showContinue {
+                Button {
+                    viewmodel.enqueueForward()
+                } label: {
+                    Label("Continue", systemImage: "chevron.forward")
+                        .labelStyle(SwappedLabelStyle())
                 }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewmodel.canAdvance)
             }
         }
     }
@@ -961,7 +994,7 @@ extension LetterCreationView {
 
         var contentWarning: String? {
             guard let composeKind, isOverContentLimit else { return nil }
-            return limits.overLimitMessage(for: composeKind)
+            return limits.overLimitMessage(byteCount: contentByteCount, for: composeKind)
         }
 
         var letterSheetContent: LetterSheetContent {
@@ -1054,9 +1087,13 @@ extension LetterCreationView {
                 }
             case .stamp:
                 if needsStampsBeforeSend {
-                    return canClaimStampAllowance
-                        ? PromoText.stampPhaseClaimOrUpgrade
-                        : PromoText.stampPhaseOutOfStamps
+                    if canClaimStampAllowance {
+                        return PromoText.stampPhaseClaimOrUpgrade
+                    }
+                    if let nextStampClaimLabel {
+                        return "\(PromoText.stampPhaseOutOfStamps) \(nextStampClaimLabel)"
+                    }
+                    return PromoText.stampPhaseOutOfStamps
                 }
                 if let stampBalanceLabel {
                     return PromoText.stampPhaseReady(balanceLabel: stampBalanceLabel)
@@ -1224,8 +1261,12 @@ extension LetterCreationView {
         }
 
         @MainActor
-        func goBack() async {
+        func goBack(dismiss: DismissAction? = nil) async {
             switch phase {
+            case .destination:
+                if let dismiss {
+                    dismiss()
+                }
             case .returnAddress:
                 await transition(to: .destination, zoomOutFirst: true)
             case .letterType, .compose:
@@ -1531,7 +1572,8 @@ extension LetterCreationView {
             let scaleY = viewportSize.height / (frame.height * padding)
             let scale = min(max(min(scaleX, scaleY), 1.05), 1.65)
 
-            // Stage is top-centered in the viewport; camera transforms apply to that full viewport.
+            // Stage is top-centered in the visible well between floating chrome;
+            // camera transforms share that coordinate space.
             let stageOrigin = CGPoint(
                 x: (viewportSize.width - stageSize.width) / 2,
                 y: 0

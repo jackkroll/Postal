@@ -41,8 +41,8 @@ enum PromoText {
         "\(count) stamp\(count == 1 ? "" : "s") per send"
     }
 
-    static func letterSizeCeilings(textLabel: String, drawingLabel: String) -> String {
-        "Text \(textLabel) · Drawing \(drawingLabel)"
+    static func letterSizePlanLabel(isSubscriber: Bool) -> String {
+        isSubscriber ? "Plus limits" : "Free limits"
     }
 
     // MARK: Stamps

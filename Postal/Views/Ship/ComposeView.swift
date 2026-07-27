@@ -64,7 +64,10 @@ private struct ComposeEditor: View {
                         .foregroundStyle(.secondary)
                 } else if viewmodel.isOverByteLimit {
                     Label(
-                        viewmodel.limits.overLimitMessage(for: .text),
+                        viewmodel.limits.overLimitMessage(
+                            byteCount: viewmodel.letterByteCount,
+                            for: .text
+                        ),
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .font(.caption)
