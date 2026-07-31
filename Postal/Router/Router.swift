@@ -37,7 +37,16 @@ import Observation
     func popToRoot() {
         path.removeLast(path.count)
     }
-    
+
+    /// Replace the stack with the destination for an inbound deep link.
+    func open(_ deepLink: DeepLink) {
+        popToRoot()
+        switch deepLink {
+        case let .track(trackingNumber):
+            push(.track(trackingNum: trackingNumber))
+        }
+    }
+
     @ViewBuilder
     static func view(for route: ViewRoute) -> some View {
         switch route {

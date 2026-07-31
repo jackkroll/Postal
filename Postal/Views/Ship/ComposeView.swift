@@ -34,6 +34,9 @@ struct ComposeView: View {
                     ComposeSendButton(viewmodel: viewmodel)
                 }
             }
+            .task {
+                await viewmodel.refreshLimits()
+            }
     }
 }
 
@@ -53,21 +56,25 @@ private struct ComposeEditor: View {
                 .transaction { $0.animation = nil }
 
             VStack(alignment: .leading, spacing: 6) {
-                LetterLimitsProgressBar(
-                    byteCount: viewmodel.letterByteCount,
-                    kind: .text,
-                    limits: viewmodel.limits
-                )
+                if let limits = viewmodel.limits {
+                    LetterLimitsProgressBar(
+                        byteCount: viewmodel.letterByteCount,
+                        kind: .text,
+                        limits: limits
+                    )
+                } else {
+                    ProgressView("Loading limits…")
+                }
                 if viewmodel.letterText.isEmpty {
                     Text("Required")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if viewmodel.isOverByteLimit {
                     Label(
-                        viewmodel.limits.overLimitMessage(
+                        viewmodel.limits?.overLimitMessage(
                             byteCount: viewmodel.letterByteCount,
                             for: .text
-                        ),
+                        ) ?? "Waiting for limits…",
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .font(.caption)
@@ -102,13 +109,13 @@ extension ComposeView {
     @Observable
     class ViewModel {
         let api: APIClient
-        let limits: LetterLimits
+        var limits: LetterLimits?
 
         init(
             api: APIClient,
             source: MailboxSummary,
             destination: MailboxSummary,
-            limits: LetterLimits = AppConfiguration.letterLimits
+            limits: LetterLimits? = nil
         ) {
             self.api = api
             self.source = source
@@ -129,12 +136,14 @@ extension ComposeView {
         }
 
         var isOverByteLimit: Bool {
-            limits.exceedsLimit(letterByteCount, for: .text)
+            guard let limits else { return false }
+            return limits.exceedsLimit(letterByteCount, for: .text)
         }
 
         var canSend: Bool {
             !isSending
             && !trimmed(letterText).isEmpty
+            && limits != nil
             && !isOverByteLimit
         }
 
@@ -165,6 +174,15 @@ extension ComposeView {
             }
         }
 
+        @MainActor
+        func refreshLimits() async {
+            do {
+                limits = try await api.getLimits()
+            } catch {
+                limits = nil
+            }
+        }
+
     }
 }
 
@@ -184,7 +202,7 @@ extension ComposeView {
 #Preview("Over Limit") {
     NavigationStack {
         ComposeView(viewmodel: .preview(
-            letterText: String(repeating: "A", count: AppConfiguration.letterLimits.maxTextBytes + 1)
+            letterText: String(repeating: "A", count: LetterLimits.preview.maxTextBytes + 1)
         ))
     }
 }

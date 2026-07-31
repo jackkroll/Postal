@@ -34,16 +34,16 @@ struct LetterLimitsProgressBar: View {
     LetterLimitsProgressBar(
         byteCount: 24_000,
         kind: .text,
-        limits: AppConfiguration.letterLimits
+        limits: .preview
     )
     .padding()
 }
 
 #Preview("Over Limit") {
     LetterLimitsProgressBar(
-        byteCount: AppConfiguration.letterLimits.maxTextBytes + 1,
+        byteCount: LetterLimits.preview.maxTextBytes + 1,
         kind: .text,
-        limits: AppConfiguration.letterLimits
+        limits: .preview
     )
     .padding()
 }

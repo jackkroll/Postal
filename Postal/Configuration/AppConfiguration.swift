@@ -8,17 +8,19 @@ enum AppConfiguration {
     static let apiBaseURL = URL(string: "http://postal.jackk.dev")!
     #endif
 
+    /// Host used for universal / web deep links (`https://postal.jackk.dev/track/...`).
+    static let deepLinkHost = "postal.jackk.dev"
+
+    /// Accepted hosts when parsing inbound track URLs (http or https).
+    static let deepLinkHosts: Set<String> = [deepLinkHost]
+
+    /// Custom URL scheme fallback: `postal://track/{number}`.
+    static let urlScheme = "postal"
+
     /// RevenueCat public SDK key (iOS).
     static let revenueCatAPIKey = "appl_KUhyCYspPQGtTxnwtTrnBPRQoZT"
 
     /// RevenueCat virtual currency code for postage stamps.
     static let stampVirtualCurrencyCode = "stamps"
 
-    /// Fallback letter size ceilings when `GET /api/me/limits` is unavailable.
-    /// Matches free-tier defaults from the limits API.
-    static let letterLimits = LetterLimits(
-        maxTextBytes: 16_384,
-        maxDrawingBytes: 2 * 1_024 * 1_024,
-        isSubscriber: false
-    )
 }

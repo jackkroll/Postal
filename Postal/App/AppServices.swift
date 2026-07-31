@@ -11,7 +11,6 @@ enum AppServices {
         client.setTokenProvider(auth)
         return client
     }()
-    static let letterLimits: LetterLimitsProviding = LetterLimitsService(api: api)
     static let entitlements: EntitlementsService = EntitlementsService(api: api)
     static let purchasesIdentity = PurchasesIdentityService()
 }

@@ -103,12 +103,7 @@ struct ClaimMailboxView: View {
                 ContentUnavailableView.search(text: viewmodel.searchText)
             } else {
                 List(viewmodel.postOffices) { office in
-                    Button {
-                        viewmodel.selectPostOffice(office)
-                    } label: {
-                        Text(office.name)
-                            .foregroundStyle(.primary)
-                    }
+                    PostOfficeLocationRow(postOffice: office)
                 }
                 .listStyle(.plain)
             }

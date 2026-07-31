@@ -674,7 +674,6 @@ extension LetterCreationView {
         let api: APIClient
         let drafts: DraftLetterStoring
         let entitlementsService: EntitlementsProviding
-        let limitsProvider: LetterLimitsProviding
         let draftID: UUID
 
         var phase: LetterCreationPhase = .overview
@@ -707,6 +706,7 @@ extension LetterCreationView {
         var needsStamps = false
         var createdTrackingNumber: String?
         var showSuccess = false
+        var limits: LetterLimits?
 
         private(set) var viewportSize: CGSize = .zero
         private(set) var stageSize: CGSize = .zero
@@ -723,7 +723,6 @@ extension LetterCreationView {
             api: APIClient,
             drafts: DraftLetterStoring = AppServices.letterDrafts,
             entitlementsService: EntitlementsProviding = AppServices.entitlements,
-            limitsProvider: LetterLimitsProviding = AppServices.letterLimits,
             origin: MailboxSummary? = nil,
             destination: MailboxSummary? = nil,
             draftID: UUID? = nil
@@ -731,7 +730,6 @@ extension LetterCreationView {
             self.api = api
             self.drafts = drafts
             self.entitlementsService = entitlementsService
-            self.limitsProvider = limitsProvider
             if let draftID, let draft = drafts.load(id: draftID) {
                 self.draftID = draft.id
                 isResumingDraft = true
@@ -963,11 +961,6 @@ extension LetterCreationView {
             )
         }
 
-        /// Server-configurable ceilings; read through the provider so a refresh propagates.
-        var limits: LetterLimits {
-            limitsProvider.limits
-        }
-
         var hasComposedContent: Bool {
             switch composeKind {
             case .text:
@@ -988,12 +981,12 @@ extension LetterCreationView {
         }
 
         var isOverContentLimit: Bool {
-            guard let composeKind else { return false }
+            guard let composeKind, let limits else { return false }
             return limits.exceedsLimit(contentByteCount, for: composeKind)
         }
 
         var contentWarning: String? {
-            guard let composeKind, isOverContentLimit else { return nil }
+            guard let composeKind, let limits, isOverContentLimit else { return nil }
             return limits.overLimitMessage(byteCount: contentByteCount, for: composeKind)
         }
 
@@ -1162,7 +1155,11 @@ extension LetterCreationView {
 
         @MainActor
         func refreshLimits() async {
-            await limitsProvider.refresh()
+            do {
+                limits = try await api.getLimits()
+            } catch {
+                limits = nil
+            }
         }
 
         @MainActor
@@ -1632,7 +1629,7 @@ extension LetterCreationView {
             phase: .letterType,
             selectedOriginMailbox: PreviewData.ownedMailboxes[0],
             selectedDestinationMailbox: PreviewData.destinationMailboxes[1],
-            letterText: String(repeating: "A", count: AppConfiguration.letterLimits.maxTextBytes + 1),
+            letterText: String(repeating: "A", count: LetterLimits.preview.maxTextBytes + 1),
             composeKind: .text
         ), loadsOnAppear: false)
     }

@@ -59,15 +59,15 @@ struct LetterComposerStatusBar: View {
         draftSaveStatus: .constant(.saving),
         byteCount: 1_024,
         kind: .text,
-        limits: AppConfiguration.letterLimits
+        limits: .preview
     )
 }
 
 #Preview("Over Limit") {
     LetterComposerStatusBar(
         draftSaveStatus: .constant(.saved),
-        byteCount: AppConfiguration.letterLimits.maxTextBytes + 1,
+        byteCount: LetterLimits.preview.maxTextBytes + 1,
         kind: .text,
-        limits: AppConfiguration.letterLimits
+        limits: .preview
     )
 }

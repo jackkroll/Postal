@@ -195,7 +195,8 @@ extension ComposeView.ViewModel {
         let viewModel = ComposeView.ViewModel(
             api: APIClient(),
             source: source,
-            destination: destination
+            destination: destination,
+            limits: .preview
         )
         viewModel.letterText = letterText
         viewModel.isSending = isSending

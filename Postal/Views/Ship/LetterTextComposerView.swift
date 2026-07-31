@@ -6,7 +6,7 @@ import SwiftUI
 /// are reported upward on a debounce for autosave.
 struct LetterTextComposerView: View {
     @Binding var draftSaveStatus: DraftSaveStatus
-    let limits: LetterLimits
+    let limits: LetterLimits?
     let onTextChange: (String) -> Void
     let onContinue: (String) -> Void
 
@@ -18,7 +18,7 @@ struct LetterTextComposerView: View {
     init(
         initialText: String = "",
         draftSaveStatus: Binding<DraftSaveStatus> = .constant(.hidden),
-        limits: LetterLimits = AppConfiguration.letterLimits,
+        limits: LetterLimits? = nil,
         onTextChange: @escaping (String) -> Void = { _ in },
         onContinue: @escaping (String) -> Void
     ) {
@@ -30,17 +30,22 @@ struct LetterTextComposerView: View {
     }
 
     private var byteCount: Int { text.utf8.count }
-    private var isOverLimit: Bool { limits.exceedsLimit(byteCount, for: .text) }
+    private var isOverLimit: Bool {
+        guard let limits else { return false }
+        return limits.exceedsLimit(byteCount, for: .text)
+    }
     private var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
-            LetterComposerStatusBar(
-                draftSaveStatus: $draftSaveStatus,
-                byteCount: byteCount,
-                kind: .text,
-                limits: limits
-            )
+            if let limits {
+                LetterComposerStatusBar(
+                    draftSaveStatus: $draftSaveStatus,
+                    byteCount: byteCount,
+                    kind: .text,
+                    limits: limits
+                )
+            }
 
             TextEditor(text: $text)
                 .focused($isFocused)
@@ -140,15 +145,19 @@ struct LetterTextComposerView: View {
 
 #Preview("Empty") {
     NavigationStack {
-        LetterTextComposerView(draftSaveStatus: .constant(.saved)) { _ in }
+        LetterTextComposerView(
+            draftSaveStatus: .constant(.saved),
+            limits: .preview
+        ) { _ in }
     }
 }
 
 #Preview("Over Limit") {
     NavigationStack {
         LetterTextComposerView(
-            initialText: String(repeating: "A", count: AppConfiguration.letterLimits.maxTextBytes + 1),
-            draftSaveStatus: .constant(.saved)
+            initialText: String(repeating: "A", count: LetterLimits.preview.maxTextBytes + 1),
+            draftSaveStatus: .constant(.saved),
+            limits: .preview
         ) { _ in }
     }
 }

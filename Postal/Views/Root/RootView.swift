@@ -21,6 +21,11 @@ struct RootView: View {
             }
         }
         .environment(router)
+        .onOpenURL(perform: handleIncomingURL)
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            handleIncomingURL(url)
+        }
         .task(id: authState.userID) {
             if let userID = authState.userID {
                 await Self.handleSignedIn(userID: userID)
@@ -30,24 +35,27 @@ struct RootView: View {
         }
     }
 
-    /// Link Firebase uid to RevenueCat, refresh entitlements/limits, and re-register push.
+    /// Opens `https://postal.jackk.dev/track/{number}` (and `postal://track/{number}`).
+    private func handleIncomingURL(_ url: URL) {
+        guard let deepLink = DeepLink.parse(url) else { return }
+        router.open(deepLink)
+    }
+
+    /// Link Firebase uid to RevenueCat, refresh entitlements, and re-register push.
     private static func handleSignedIn(userID: String) async {
         let aligned = await AppServices.purchasesIdentity.sync(firebaseUserID: userID)
         guard !Task.isCancelled else { return }
         // Prefer a confirmed RC identity before reading STAMP / refreshing.
         guard aligned || AppServices.purchasesIdentity.isAligned(with: userID) else { return }
-        async let entitlementsRefresh: Void = AppServices.entitlements.refresh()
-        async let limitsRefresh: Void = AppServices.letterLimits.refresh()
-        _ = await (entitlementsRefresh, limitsRefresh)
+        await AppServices.entitlements.refresh()
         await registerForNotificationsIfAuthorized()
     }
 
-    /// Reset RevenueCat to an anonymous user and clear local entitlements/limits.
+    /// Reset RevenueCat to an anonymous user and clear local entitlements.
     private static func handleSignedOut() async {
         _ = await AppServices.purchasesIdentity.sync(firebaseUserID: nil)
         guard !Task.isCancelled else { return }
         AppServices.entitlements.clear()
-        AppServices.letterLimits.clear()
     }
 
     /// Re-register the device token with the server after sign-in when permission

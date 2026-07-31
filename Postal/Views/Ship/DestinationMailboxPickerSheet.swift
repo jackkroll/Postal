@@ -241,7 +241,7 @@ private struct PostOfficeListView: View {
 }
 
 /// One row per post office so location-specific state can live next to the office it describes.
-private struct PostOfficeLocationRow: View {
+struct PostOfficeLocationRow: View {
     let postOffice: PostOffice
 
     @State private var locationLabel: String?

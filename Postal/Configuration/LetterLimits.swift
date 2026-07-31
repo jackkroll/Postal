@@ -96,3 +96,12 @@ extension LetterLimits: Decodable {
         maxDrawingBytes = try letter.decode(Int.self, forKey: .drawingMaxBytes)
     }
 }
+
+extension LetterLimits {
+    /// Preview-only limits for SwiftUI previews.
+    static let preview = LetterLimits(
+        maxTextBytes: 16_384,
+        maxDrawingBytes: 2 * 1_024 * 1_024,
+        isSubscriber: false
+    )
+}

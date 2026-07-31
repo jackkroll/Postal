@@ -40,6 +40,23 @@ struct TrackingView: View {
                     }
                 }
 
+                if let route = viewmodel.trackingRoute,
+                   !TrackingRouteMapView.stops(from: route).isEmpty {
+                    Section("Route") {
+                        Button {
+                            viewmodel.pushRouteMap()
+                        } label: {
+                            TrackingRouteMapView(route: route, isInteractive: false)
+                                .frame(height: 240)
+                                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .accessibilityHint("Opens full screen map")
+                    }
+                }
+
                 if let route = viewmodel.trackingRoute, !route.events.isEmpty {
                     Section("Timeline") {
                         ForEach(route.events.reversed()) { event in
@@ -79,6 +96,9 @@ struct TrackingView: View {
             }
             .navigationTitle(viewmodel.currentStatus() ?? "")
             .animation(.easeInOut,value: viewmodel.currentStatus())
+            .navigationDestination(item: $viewmodel.presentedRouteMap) { route in
+                TrackingRouteMapDetailView(route: route)
+            }
             .toolbar {
                 Button {
                     UIPasteboard.general.string = viewmodel.trackingNumber
@@ -186,6 +206,7 @@ extension TrackingView {
         var letterSummary: LetterSummary?
         var isRecipient: Bool
         var trackingRoute: TrackingRoute?
+        var presentedRouteMap: TrackingRoute?
         var errorMessage: String?
         var isLoading = false
 
@@ -226,6 +247,10 @@ extension TrackingView {
             } else {
                 self.trackingNumber = ""
             }
+        }
+
+        func pushRouteMap() {
+            presentedRouteMap = trackingRoute
         }
 
         func lookupTracking() async {

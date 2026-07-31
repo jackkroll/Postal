@@ -10,6 +10,9 @@ struct SettingsView: View {
     @State private var isPaywallPresented = false
     @State private var paywallSource: PaywallSource = .settings
     @State private var isCustomerCenterPresented = false
+    #if DEBUG
+    @State private var isAPIDebugPresented = false
+    #endif
     private let loadsOnAppear: Bool
 
     init(viewmodel: ViewModel, loadsOnAppear: Bool = true) {
@@ -189,6 +192,12 @@ struct SettingsView: View {
 
             #if DEBUG
             Section {
+                Button {
+                    isAPIDebugPresented = true
+                } label: {
+                    Label("API Debug", systemImage: "server.rack")
+                }
+
                 NavigationLink {
                     PurchasesDebugView()
                 } label: {
@@ -197,7 +206,7 @@ struct SettingsView: View {
             } header: {
                 Text("Debug")
             } footer: {
-                Text("Firebase UID, RC app user ID, alignment, entitlements, and STAMP balance.")
+                Text("Letter limits, entitlements, and other /api/me payloads; plus RevenueCat identity.")
             }
             #endif
 
@@ -235,6 +244,11 @@ struct SettingsView: View {
                 Task { await viewmodel.refresh() }
             }
         }
+        #if DEBUG
+        .sheet(isPresented: $isAPIDebugPresented) {
+            APIDebugSheet(api: viewmodel.api)
+        }
+        #endif
         .presentCustomerCenter(isPresented: $isCustomerCenterPresented, onDismiss: {
             Task { await viewmodel.refresh() }
         })
@@ -341,7 +355,6 @@ extension SettingsView {
         let auth: AuthProviding
         let push: PushNotificationsProviding
         let entitlementsService: EntitlementsProviding
-        let limitsProvider: LetterLimitsProviding
 
         var authorizationStatus: UNAuthorizationStatus = .notDetermined
         var registeredSummary: DeviceTokenSummary?
@@ -369,14 +382,12 @@ extension SettingsView {
             api: APIClient,
             auth: AuthProviding,
             push: PushNotificationsProviding,
-            entitlementsService: EntitlementsProviding = AppServices.entitlements,
-            limitsProvider: LetterLimitsProviding = AppServices.letterLimits
+            entitlementsService: EntitlementsProviding = AppServices.entitlements
         ) {
             self.api = api
             self.auth = auth
             self.push = push
             self.entitlementsService = entitlementsService
-            self.limitsProvider = limitsProvider
         }
 
         var entitlements: UserEntitlements? {
@@ -384,7 +395,7 @@ extension SettingsView {
         }
 
         var letterSizeSummary: String {
-            PromoText.letterSizePlanLabel(isSubscriber: limitsProvider.limits.isSubscriber)
+            PromoText.letterSizePlanLabel(isSubscriber: entitlements?.isSubscriber == true)
         }
 
         var isSubscriber: Bool {
@@ -474,7 +485,6 @@ extension SettingsView {
             errorMessage = nil
 
             await entitlementsService.refresh()
-            await limitsProvider.refresh()
             await refreshPreferences()
 
             do {
@@ -618,7 +628,6 @@ extension SettingsView {
             registeredSummary = nil
             showSuccess = false
             entitlementsService.clear()
-            AppServices.letterLimits.clear()
             try? auth.signOut()
         }
 
@@ -636,7 +645,6 @@ extension SettingsView {
                 registeredSummary = nil
                 showSuccess = false
                 entitlementsService.clear()
-                AppServices.letterLimits.clear()
                 try? auth.signOut()
                 return true
             } catch {
