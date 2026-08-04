@@ -57,33 +57,54 @@ private struct ComposeEditor: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 if let limits = viewmodel.limits {
-                    LetterLimitsProgressBar(
-                        byteCount: viewmodel.letterByteCount,
-                        kind: .text,
-                        limits: limits
-                    )
+                    let stampCost = limits.stampCost(byteSize: viewmodel.letterByteCount, kind: .text)
+                    let isOver = viewmodel.isOverByteLimit
+                    let fraction = limits.meterFraction(byteCount: viewmodel.letterByteCount, for: .text)
+                    HStack(spacing: 8) {
+                        if viewmodel.letterText.isEmpty {
+                            Text("Required")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if isOver {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(Color.red)
+                            Text(limits.overAmountDescription(byteCount: viewmodel.letterByteCount, for: .text))
+                                .font(.caption2)
+                                .foregroundStyle(Color.red)
+                                .lineLimit(1)
+                        } else if limits.usesStampMeter {
+                            Text(
+                                stampCost > 1
+                                    ? PromoText.usingStampCount(stampCost)
+                                    : PromoText.stampCount(max(stampCost, 1))
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        } else if fraction >= 0.8 {
+                            Text(limits.formattedUsage(byteCount: viewmodel.letterByteCount, for: .text))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        LetterLimitsProgressBar(
+                            byteCount: viewmodel.letterByteCount,
+                            kind: .text,
+                            limits: limits
+                        )
+                        .frame(maxWidth: 140)
+                    }
                 } else {
                     ProgressView("Loading limits…")
-                }
-                if viewmodel.letterText.isEmpty {
-                    Text("Required")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if viewmodel.isOverByteLimit {
-                    Label(
-                        viewmodel.limits?.overLimitMessage(
-                            byteCount: viewmodel.letterByteCount,
-                            for: .text
-                        ) ?? "Waiting for limits…",
-                        systemImage: "exclamationmark.triangle.fill"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(Color.red)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(.bar)
+            .animation(
+                .snappy(duration: 0.2),
+                value: viewmodel.limits?.stampCost(byteSize: viewmodel.letterByteCount, kind: .text)
+            )
         }
         .background(Color(.systemBackground))
         .scrollDismissesKeyboard(.immediately)

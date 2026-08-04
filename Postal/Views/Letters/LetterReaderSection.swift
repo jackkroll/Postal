@@ -49,7 +49,7 @@ struct LetterReaderSection: View {
             )
         } catch let error as APIError {
             switch error {
-            case .httpStatus(403, _):
+            case .httpStatus(403, _, _):
                 isAccessDenied = true
             default:
                 errorMessage = error.localizedDescription

@@ -23,7 +23,12 @@ struct TrackingView: View {
 
                 if let route = viewmodel.trackingRoute {
                     Section {
-                        TrackingStatusHeader(route: route, summary: route.statusSummary())
+                        TrackingStatusHeader(
+                            route: route,
+                            summary: route.statusSummary(),
+                            expectedDeliveryTime: viewmodel.expectedDeliveryTime,
+                            deliveredAt: route.deliveredAt
+                        )
                             .listRowSeparator(.hidden)
                             .padding(4)
                             .listRowBackground(StatusCardBackground(tint: route.statusColor()))
@@ -41,14 +46,24 @@ struct TrackingView: View {
                 }
 
                 if let route = viewmodel.trackingRoute,
-                   !TrackingRouteMapView.stops(from: route).isEmpty {
+                   !TrackingRouteMapView.stops(
+                    from: route,
+                    locationsByCode: viewmodel.locationsByCode,
+                    trackingInfo: viewmodel.trackingInfo
+                   ).isEmpty {
                     Section("Route") {
                         Button {
                             viewmodel.pushRouteMap()
                         } label: {
-                            TrackingRouteMapView(route: route, isInteractive: false)
-                                .frame(height: 240)
-                                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            TrackingRouteMapView(
+                                route: route,
+                                locationsByCode: viewmodel.locationsByCode,
+                                trackingInfo: viewmodel.trackingInfo,
+                                isInteractive: true,
+                                waitsForWarmup: true
+                            )
+                            .frame(height: 240)
+                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(EdgeInsets())
@@ -97,7 +112,14 @@ struct TrackingView: View {
             .navigationTitle(viewmodel.currentStatus() ?? "")
             .animation(.easeInOut,value: viewmodel.currentStatus())
             .navigationDestination(item: $viewmodel.presentedRouteMap) { route in
-                TrackingRouteMapDetailView(route: route)
+                TrackingRouteMapDetailView(
+                    route: route,
+                    locationsByCode: viewmodel.locationsByCode,
+                    trackingInfo: viewmodel.trackingInfo
+                )
+            }
+            .task {
+                MapKitWarmup.prepareIfNeeded()
             }
             .toolbar {
                 Button {
@@ -153,29 +175,55 @@ struct TrackingView: View {
 private struct TrackingStatusHeader: View {
     let route: TrackingRoute
     let summary: TrackingStatusSummary
+    let expectedDeliveryTime: Date?
+    let deliveredAt: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: route.statusIcon())
-                .font(.title2)
-                .foregroundStyle(route.statusColor())
-                .frame(width: 48, height: 48)
-                .background(route.statusColor().opacity(0.18))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            Text(summary.message)
-                .font(.title3)
-                .bold()
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let context = summary.context {
-                Text(context)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: route.statusIcon())
+                        .font(.title2)
+                        .foregroundStyle(route.statusColor())
+                        .frame(width: 48, height: 48)
+                        .background(route.statusColor().opacity(0.18))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Spacer()
+                    if let expectedDeliveryTime = expectedDeliveryTime {
+                        HStack {
+                            Text("\(route.status == .delivered ? "Arrived": "Expected") \(expectedDeliveryTime.formatted(date: .long, time: .omitted))")
+                        }
+                        .foregroundStyle(.secondary)
+                        .bold()
+                    }
+                }
+                
+                Text(summary.message)
+                    .font(.title3)
+                    .bold()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                if let context = summary.context {
+                    Text(context)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-        }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var arrivalLine: String? {
+        if route.status == .delivered, let deliveredAt {
+            return "Arrived \(deliveredAt.formatted(date: .abbreviated, time: .omitted))"
+        }
+        if let expectedDeliveryTime {
+            let label = route.status == .delivered ? "Arrived" : "Expected"
+            return "\(label) \(expectedDeliveryTime.formatted(date: .abbreviated, time: .omitted))"
+        }
+        if route.status == .failed || !route.routeFound {
+            return "ETA unavailable"
+        }
+        return nil
     }
 }
 
@@ -205,7 +253,9 @@ extension TrackingView {
         var trackingNumber: String
         var letterSummary: LetterSummary?
         var isRecipient: Bool
+        var trackingInfo: TrackingInfo?
         var trackingRoute: TrackingRoute?
+        var locationsByCode: [Int: Location] = [:]
         var presentedRouteMap: TrackingRoute?
         var errorMessage: String?
         var isLoading = false
@@ -225,6 +275,11 @@ extension TrackingView {
         var letterReadingLink: (shipmentID: String, metadata: LetterMetadata)? {
             guard let shipmentID, let letterMetadata else { return nil }
             return (shipmentID, letterMetadata)
+        }
+
+        /// Prefer live public-track ETA; fall back to shipment-backed letter summary.
+        var expectedDeliveryTime: Date? {
+            trackingInfo?.expectedDeliveryTime ?? letterSummary?.expectedDeliveryTime
         }
 
         init(
@@ -259,14 +314,49 @@ extension TrackingView {
 
             isLoading = true
             errorMessage = nil
+            trackingInfo = nil
             trackingRoute = nil
+            locationsByCode = [:]
             defer { isLoading = false }
 
             do {
-                trackingRoute = try await api.get(.publicTrackRoute(trackingNumber: number))
+                async let summaryRequest: TrackingInfo = api.get(.publicTrack(trackingNumber: number))
+                async let routeRequest: TrackingRoute = api.get(.publicTrackRoute(trackingNumber: number))
+                let summary = try await summaryRequest
+                let route = try await routeRequest
+                trackingInfo = summary
+                trackingRoute = route
+                if let letterSummary {
+                    self.letterSummary = letterSummary.attaching(tracking: summary)
+                }
+                // Resolve coordinates off the critical path so status/timeline paint first.
+                Task { await resolveMapLocations(for: route, trackingInfo: summary) }
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+
+        /// Live `/route` facilities omit coordinates; resolve them via `/api/locations/{code}`.
+        func resolveMapLocations(for route: TrackingRoute, trackingInfo: TrackingInfo?) async {
+            let codes = TrackingRouteMapView.facilityIDs(in: route, trackingInfo: trackingInfo)
+            guard !codes.isEmpty else { return }
+
+            var fetched: [Int: Location] = [:]
+            await withTaskGroup(of: (Int, Location?).self) { group in
+                for code in codes where locationsByCode[code] == nil {
+                    group.addTask {
+                        (code, try? await self.api.fetchLocation(code: code))
+                    }
+                }
+                for await (code, location) in group {
+                    if let location {
+                        fetched[code] = location
+                    }
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            locationsByCode.merge(fetched) { _, new in new }
         }
 
         func lookupLocation(code: Int) async throws -> Location {
@@ -274,7 +364,7 @@ extension TrackingView {
         }
         
         func currentStatus() -> String? {
-            trackingRoute?.status.displayTitle
+            trackingRoute?.status.displayTitle ?? trackingInfo?.status.displayTitle
         }
         
     }
@@ -290,7 +380,8 @@ extension TrackingView {
     NavigationStack {
         TrackingView(viewmodel: .preview(
             trackingNumber: PreviewData.inTransitTrackingNumber,
-            route: PreviewData.routeInTransit
+            route: PreviewData.routeInTransit,
+            trackingInfo: PreviewData.trackingInfoInTransit
         ))
     }
 }
@@ -300,6 +391,7 @@ extension TrackingView {
         TrackingView(viewmodel: .preview(
             trackingNumber: PreviewData.deliveredTrackingNumber,
             route: PreviewData.routeDelivered,
+            trackingInfo: PreviewData.trackingInfoDelivered,
             letterSummary: PreviewData.letterDelivered
         ))
     }
@@ -310,6 +402,7 @@ extension TrackingView {
         TrackingView(viewmodel: .preview(
             trackingNumber: PreviewData.deliveredTrackingNumber,
             route: PreviewData.routeDelivered,
+            trackingInfo: PreviewData.trackingInfoDelivered,
             letterSummary: PreviewData.letterDelivered,
             isRecipient: true
         ))
@@ -320,7 +413,8 @@ extension TrackingView {
     NavigationStack {
         TrackingView(viewmodel: .preview(
             trackingNumber: PreviewData.deliveredTrackingNumber,
-            route: PreviewData.routeDelivered
+            route: PreviewData.routeDelivered,
+            trackingInfo: PreviewData.trackingInfoDelivered
         ))
     }
 }

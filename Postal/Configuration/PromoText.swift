@@ -37,8 +37,25 @@ enum PromoText {
     static let accountFooterFree =
         "Free accounts get a periodic stamp allowance. Plus unlocks unlimited sends, more mailboxes, and detailed notifications."
 
-    static func stampsPerSend(_ count: Int) -> String {
-        "\(count) stamp\(count == 1 ? "" : "s") per send"
+    static func stampCostForLetter(_ count: Int) -> String {
+        "\(count) stamp\(count == 1 ? "" : "s") for this letter"
+    }
+
+    static func stampCount(_ count: Int) -> String {
+        "\(count) stamp\(count == 1 ? "" : "s")"
+    }
+
+    /// Composer headline when the letter crosses into another stamp.
+    static func usingStampCount(_ count: Int) -> String {
+        if count <= 1 {
+            return stampCount(1)
+        }
+        return "Using \(count) stamps"
+    }
+
+    /// Settings summary of the size-based tariff.
+    static func stampPricingSummary(_ pricing: StampPricing) -> String {
+        "From \(pricing.minStamps) · by letter size"
     }
 
     static func letterSizePlanLabel(isSubscriber: Bool) -> String {

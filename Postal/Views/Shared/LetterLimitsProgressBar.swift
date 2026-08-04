@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Compact usage meter for letter size ceilings.
+/// Compact usage meter: stamp-bucket fill for Free, size ceiling for Plus.
 struct LetterLimitsProgressBar: View {
     let byteCount: Int
     let kind: LetterComposeKind
     let limits: LetterLimits
 
     private var fraction: Double {
-        limits.usageFraction(byteCount, for: kind)
+        limits.meterFraction(byteCount: byteCount, for: kind)
     }
 
     private var isOverLimit: Bool {
@@ -18,32 +18,52 @@ struct LetterLimitsProgressBar: View {
         min(max(fraction, 0), 1)
     }
 
+    private var accessibilityName: String {
+        limits.usesStampMeter ? "Stamp usage" : "Letter size"
+    }
+
+    private var accessibilityDetail: String {
+        if isOverLimit {
+            return limits.overAmountDescription(byteCount: byteCount, for: kind)
+        }
+        if limits.usesStampMeter {
+            return limits.formattedStampFill(byteCount: byteCount, for: kind)
+        }
+        return limits.formattedUsage(byteCount: byteCount, for: kind)
+    }
+
     var body: some View {
         ProgressView(value: clampedFraction)
             .tint(isOverLimit ? Color.red : Color.accentColor)
-            .accessibilityLabel("Letter size")
-            .accessibilityValue(
-                isOverLimit
-                    ? limits.overAmountDescription(byteCount: byteCount, for: kind)
-                    : limits.formattedUsage(byteCount: byteCount, for: kind)
-            )
+            .accessibilityLabel(accessibilityName)
+            .accessibilityValue(accessibilityDetail)
+            .animation(.snappy(duration: 0.2), value: limits.stampCost(byteSize: byteCount, kind: kind))
     }
 }
 
-#Preview("Partial") {
+#Preview("Free stamp fill") {
     LetterLimitsProgressBar(
-        byteCount: 24_000,
+        byteCount: 2_400,
         kind: .text,
         limits: .preview
     )
     .padding()
 }
 
-#Preview("Over Limit") {
+#Preview("Free second stamp") {
     LetterLimitsProgressBar(
-        byteCount: LetterLimits.preview.maxTextBytes + 1,
+        byteCount: 4_100,
         kind: .text,
-        limits: .preview
+        limits: .previewMultiStamp
+    )
+    .padding()
+}
+
+#Preview("Plus size") {
+    LetterLimitsProgressBar(
+        byteCount: 8_000,
+        kind: .text,
+        limits: .previewPlus
     )
     .padding()
 }

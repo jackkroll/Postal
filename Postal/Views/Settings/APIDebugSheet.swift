@@ -74,10 +74,20 @@ struct APIDebugSheet: View {
             if let limits = snapshot.limits {
                 LabeledContent("Plan ceilings", value: limits.planLabel)
                 LabeledContent("is_subscriber", value: limits.isSubscriber ? "true" : "false")
+                LabeledContent("unlimited_sends", value: limits.unlimitedSends ? "true" : "false")
                 debugRow("text_max_bytes", formattedBytes(limits.maxTextBytes))
                 debugRow("drawing_max_bytes", formattedBytes(limits.maxDrawingBytes))
                 debugRow("text_max_bytes (raw)", "\(limits.maxTextBytes)")
                 debugRow("drawing_max_bytes (raw)", "\(limits.maxDrawingBytes)")
+                if let subscriberText = limits.subscriberTextMaxBytes {
+                    debugRow("subscriber.text_max_bytes", "\(subscriberText)")
+                }
+                if let subscriberDrawing = limits.subscriberDrawingMaxBytes {
+                    debugRow("subscriber.drawing_max_bytes", "\(subscriberDrawing)")
+                }
+                LabeledContent("text_bytes_per_stamp", value: "\(limits.stampPricing.textBytesPerStamp)")
+                LabeledContent("drawing_bytes_per_stamp", value: "\(limits.stampPricing.drawingBytesPerStamp)")
+                LabeledContent("min_stamps", value: "\(limits.stampPricing.minStamps)")
             } else if let error = snapshot.limitsError {
                 Text(error)
                     .font(.footnote)
@@ -89,7 +99,7 @@ struct APIDebugSheet: View {
         } header: {
             Text("Letter Limits")
         } footer: {
-            Text("GET /api/me/limits — ceilings used by compose.")
+            Text("GET /api/me/limits — size ceilings + stamp_pricing for compose (no stamp-grant side effects).")
         }
     }
 
@@ -99,7 +109,9 @@ struct APIDebugSheet: View {
                 LabeledContent("is_subscriber", value: entitlements.isSubscriber ? "true" : "false")
                 debugRow("expires_at", entitlements.expiresAt)
                 LabeledContent("stamp_balance (API)", value: "\(entitlements.stampBalance)")
-                LabeledContent("stamps_per_send", value: "\(entitlements.stampsPerSend)")
+                LabeledContent("text_bytes_per_stamp", value: "\(entitlements.stampPricing.textBytesPerStamp)")
+                LabeledContent("drawing_bytes_per_stamp", value: "\(entitlements.stampPricing.drawingBytesPerStamp)")
+                LabeledContent("min_stamps", value: "\(entitlements.stampPricing.minStamps)")
                 LabeledContent("unlimited_sends", value: entitlements.unlimitedSends ? "true" : "false")
                 LabeledContent("mailbox_limit", value: "\(entitlements.mailboxLimit)")
                 LabeledContent("owned_mailboxes", value: "\(entitlements.ownedMailboxes)")
@@ -325,8 +337,14 @@ struct APIDebugSnapshot: Sendable {
             lines += [
                 "Letter Limits:",
                 "  is_subscriber: \(limits.isSubscriber)",
+                "  unlimited_sends: \(limits.unlimitedSends)",
                 "  text_max_bytes: \(limits.maxTextBytes)",
                 "  drawing_max_bytes: \(limits.maxDrawingBytes)",
+                "  subscriber.text_max_bytes: \(limits.subscriberTextMaxBytes.map(String.init) ?? "—")",
+                "  subscriber.drawing_max_bytes: \(limits.subscriberDrawingMaxBytes.map(String.init) ?? "—")",
+                "  stamp_pricing.text_bytes_per_stamp: \(limits.stampPricing.textBytesPerStamp)",
+                "  stamp_pricing.drawing_bytes_per_stamp: \(limits.stampPricing.drawingBytesPerStamp)",
+                "  stamp_pricing.min_stamps: \(limits.stampPricing.minStamps)",
                 "",
             ]
         } else {
@@ -339,7 +357,9 @@ struct APIDebugSnapshot: Sendable {
                 "  is_subscriber: \(entitlements.isSubscriber)",
                 "  expires_at: \(entitlements.expiresAt ?? "—")",
                 "  stamp_balance: \(entitlements.stampBalance)",
-                "  stamps_per_send: \(entitlements.stampsPerSend)",
+                "  stamp_pricing.text_bytes_per_stamp: \(entitlements.stampPricing.textBytesPerStamp)",
+                "  stamp_pricing.drawing_bytes_per_stamp: \(entitlements.stampPricing.drawingBytesPerStamp)",
+                "  stamp_pricing.min_stamps: \(entitlements.stampPricing.minStamps)",
                 "  unlimited_sends: \(entitlements.unlimitedSends)",
                 "  mailbox_limit: \(entitlements.mailboxLimit)",
                 "  owned_mailboxes: \(entitlements.ownedMailboxes)",

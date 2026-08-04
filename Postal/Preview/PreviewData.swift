@@ -12,8 +12,16 @@ enum PreviewData {
         return Calendar.current.date(byAdding: .day, value: -days, to: base) ?? base
     }
 
+    static func daysFromNow(_ days: Int, hour: Int = 12) -> Date {
+        daysAgo(-days, hour: hour)
+    }
+
     static func hoursAgo(_ hours: Int) -> Date {
         Calendar.current.date(byAdding: .hour, value: -hours, to: referenceDate) ?? referenceDate
+    }
+
+    static func hoursFromNow(_ hours: Int) -> Date {
+        hoursAgo(-hours)
     }
 
     // MARK: - Post Offices
@@ -203,6 +211,7 @@ enum PreviewData {
         letterMimeType: "text/plain",
         letterEncoding: nil,
         letterByteSize: sampleLetterText.utf8.count,
+        expectedDeliveryTime: daysFromNow(1, hour: 10),
         createdAt: daysAgo(3),
         updatedAt: hoursAgo(2)
     )
@@ -217,6 +226,7 @@ enum PreviewData {
         letterMimeType: "text/plain",
         letterEncoding: nil,
         letterByteSize: sampleLetterText.utf8.count,
+        expectedDeliveryTime: daysAgo(1, hour: 12),
         createdAt: daysAgo(7),
         updatedAt: daysAgo(1)
     )
@@ -231,6 +241,7 @@ enum PreviewData {
         letterMimeType: "text/plain",
         letterEncoding: nil,
         letterByteSize: sampleLetterText.utf8.count,
+        expectedDeliveryTime: daysFromNow(2, hour: 14),
         createdAt: hoursAgo(1),
         updatedAt: hoursAgo(1)
     )
@@ -245,6 +256,7 @@ enum PreviewData {
         letterMimeType: nil,
         letterEncoding: nil,
         letterByteSize: nil,
+        expectedDeliveryTime: hoursFromNow(3),
         createdAt: daysAgo(2),
         updatedAt: hoursAgo(4)
     )
@@ -259,6 +271,7 @@ enum PreviewData {
         letterMimeType: "image/png",
         letterEncoding: nil,
         letterByteSize: 12_400,
+        expectedDeliveryTime: nil,
         createdAt: daysAgo(5),
         updatedAt: daysAgo(2)
     )
@@ -273,42 +286,52 @@ enum PreviewData {
 
     // MARK: - Inbound Letters
 
-    static let inboundLetters: [InboundLetterItem] = [
-        InboundLetterItem(
-            id: "inbound-in-transit",
+    static let inboundLetters: [LetterSummary] = [
+        LetterSummary(
             trackingNumber: inTransitTrackingNumber,
+            shipmentID: "inbound-in-transit",
+            origin: LetterEndpoint(mailboxID: destinationMailboxes[2].id),
+            destination: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
             status: .inTransit,
-            originName: riversideStation.name,
-            destinationName: mainStreetPostOffice.name,
             hasLetter: true,
             letterFormat: .text,
             letterMimeType: "text/plain",
+            letterEncoding: nil,
             letterByteSize: sampleLetterText.utf8.count,
             canReadLetter: true,
+            expectedDeliveryTime: daysFromNow(1, hour: 10),
             createdAt: daysAgo(2),
             updatedAt: hoursAgo(3)
         ),
-        InboundLetterItem(
-            id: "inbound-delivered",
+        LetterSummary(
             trackingNumber: deliveredTrackingNumber,
+            shipmentID: "inbound-delivered",
+            origin: LetterEndpoint(mailboxID: destinationMailboxes[3].id),
+            destination: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
             status: .delivered,
-            originName: westsideDeliveryOffice.name,
-            destinationName: mainStreetPostOffice.name,
             hasLetter: true,
             letterFormat: .text,
             letterMimeType: "text/plain",
+            letterEncoding: nil,
             letterByteSize: sampleLetterText.utf8.count,
             canReadLetter: true,
+            expectedDeliveryTime: daysAgo(1, hour: 12),
             createdAt: daysAgo(6),
             updatedAt: daysAgo(1)
         ),
-        InboundLetterItem(
-            id: "inbound-out-for-delivery",
+        LetterSummary(
             trackingNumber: "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+            shipmentID: "inbound-out-for-delivery",
+            origin: LetterEndpoint(rawValue: centralSortingFacility.name),
+            destination: LetterEndpoint(mailboxID: ownedMailboxes[1].id),
             status: .outForDelivery,
-            originName: centralSortingFacility.name,
-            destinationName: westsideDeliveryOffice.name,
             hasLetter: false,
+            letterFormat: nil,
+            letterMimeType: nil,
+            letterEncoding: nil,
+            letterByteSize: nil,
+            canReadLetter: false,
+            expectedDeliveryTime: hoursFromNow(3),
             createdAt: daysAgo(1),
             updatedAt: hoursAgo(5)
         ),
@@ -317,10 +340,21 @@ enum PreviewData {
     // MARK: - Tracking Info
 
     static let trackingInfoInTransit = TrackingInfo(
+        trackingNumber: inTransitTrackingNumber,
         status: .inTransit,
-        destination: LetterEndpoint(mailboxID: destinationMailboxes[0].id),
-        origin: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
-        trackingNumber: inTransitTrackingNumber
+        fromPostOffice: mainStreetPostOffice,
+        toPostOffice: westsideDeliveryOffice,
+        expectedDeliveryTime: daysFromNow(1, hour: 10),
+        updatedAt: hoursAgo(2)
+    )
+
+    static let trackingInfoDelivered = TrackingInfo(
+        trackingNumber: deliveredTrackingNumber,
+        status: .delivered,
+        fromPostOffice: mainStreetPostOffice,
+        toPostOffice: westsideDeliveryOffice,
+        expectedDeliveryTime: daysAgo(1, hour: 12),
+        updatedAt: daysAgo(1, hour: 12)
     )
 
     // MARK: - Tracking Routes
@@ -337,46 +371,53 @@ enum PreviewData {
         ],
         events: [
             ShipmentTrackingEvent(
-                eventType: "picked_up",
+                eventID: 1,
+                eventType: "submitted",
                 facility: mainStreetPostOffice,
                 facilityID: 1,
-                scheduledFor: nil,
+                scheduledFor: daysAgo(3, hour: 9),
                 recordedAt: daysAgo(3, hour: 9)
             ),
             ShipmentTrackingEvent(
-                eventType: "departed_facility",
+                eventID: 2,
+                eventType: "departed",
                 facility: mainStreetPostOffice,
                 facilityID: 1,
-                scheduledFor: nil,
+                scheduledFor: daysAgo(3, hour: 10),
                 recordedAt: daysAgo(3, hour: 10)
             ),
             ShipmentTrackingEvent(
-                eventType: "arrived_facility",
+                eventID: 3,
+                eventType: "arrived",
                 facility: centralSortingFacility,
                 facilityID: 42,
-                scheduledFor: nil,
+                scheduledFor: daysAgo(2, hour: 14),
                 recordedAt: daysAgo(2, hour: 14)
             ),
             ShipmentTrackingEvent(
-                eventType: "departed_facility",
+                eventID: 4,
+                eventType: "departed",
                 facility: centralSortingFacility,
                 facilityID: 42,
-                scheduledFor: nil,
+                scheduledFor: daysAgo(2, hour: 16),
                 recordedAt: daysAgo(2, hour: 16)
             ),
             ShipmentTrackingEvent(
-                eventType: "arrived_facility",
+                eventID: 5,
+                eventType: "arrived",
                 facility: riversideStation,
                 facilityID: 87,
-                scheduledFor: nil,
+                scheduledFor: hoursAgo(6),
                 recordedAt: hoursAgo(6)
             ),
             ShipmentTrackingEvent(
-                eventType: "departed_facility",
+                eventID: 6,
+                eventType: "departed",
                 facility: riversideStation,
                 facilityID: 87,
-                scheduledFor: nil,
-                recordedAt: hoursAgo(2)            ),
+                scheduledFor: hoursAgo(2),
+                recordedAt: hoursAgo(2)
+            ),
         ]
     )
 
@@ -391,17 +432,19 @@ enum PreviewData {
         ],
         events: [
             ShipmentTrackingEvent(
-                eventType: "picked_up",
+                eventID: 1,
+                eventType: "submitted",
                 facility: mainStreetPostOffice,
                 facilityID: 1,
-                scheduledFor: nil,
+                scheduledFor: daysAgo(7, hour: 8),
                 recordedAt: daysAgo(7, hour: 8)
             ),
             ShipmentTrackingEvent(
+                eventID: 2,
                 eventType: "delivered",
                 facility: westsideDeliveryOffice,
                 facilityID: 156,
-                scheduledFor: nil,
+                scheduledFor: daysAgo(1, hour: 12),
                 recordedAt: daysAgo(1, hour: 12)
             ),
         ]
@@ -415,10 +458,11 @@ enum PreviewData {
         timeline: [],
         events: [
             ShipmentTrackingEvent(
-                eventType: "created",
+                eventID: 1,
+                eventType: "submitted",
                 facility: mainStreetPostOffice,
                 facilityID: 1,
-                scheduledFor: nil,
+                scheduledFor: hoursAgo(1),
                 recordedAt: hoursAgo(1)
             ),
         ]

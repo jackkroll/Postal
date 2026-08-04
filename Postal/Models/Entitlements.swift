@@ -46,14 +46,18 @@ struct NotificationEntitlements: Codable, Hashable, Sendable {
 ///
 /// `stampBalance` may still appear in the JSON for compatibility, but the app
 /// overlays it from RevenueCat’s `STAMP` virtual currency after fetch.
+///
+/// Prefer `GET /api/me/limits` while composing — entitlements may credit the
+/// one-time free stamp grant as a side effect.
 struct UserEntitlements: Codable, Hashable, Sendable {
     var isSubscriber: Bool
     var expiresAt: String?
     var stampBalance: Int
-    var stampsPerSend: Int
+    var stampPricing: StampPricing
     var unlimitedSends: Bool
     var mailboxLimit: Int
     var ownedMailboxes: Int
+    var letter: LetterLimitBlock?
     var allowance: StampAllowanceInfo
     var notification: NotificationEntitlements
 
@@ -61,10 +65,11 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         case isSubscriber = "is_subscriber"
         case expiresAt = "expires_at"
         case stampBalance = "stamp_balance"
-        case stampsPerSend = "stamps_per_send"
+        case stampPricing = "stamp_pricing"
         case unlimitedSends = "unlimited_sends"
         case mailboxLimit = "mailbox_limit"
         case ownedMailboxes = "owned_mailboxes"
+        case letter
         case allowance
         case notification
     }
@@ -73,20 +78,22 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         isSubscriber: Bool,
         expiresAt: String?,
         stampBalance: Int,
-        stampsPerSend: Int,
+        stampPricing: StampPricing = .default,
         unlimitedSends: Bool,
         mailboxLimit: Int,
         ownedMailboxes: Int,
+        letter: LetterLimitBlock? = nil,
         allowance: StampAllowanceInfo,
         notification: NotificationEntitlements
     ) {
         self.isSubscriber = isSubscriber
         self.expiresAt = expiresAt
         self.stampBalance = stampBalance
-        self.stampsPerSend = stampsPerSend
+        self.stampPricing = stampPricing
         self.unlimitedSends = unlimitedSends
         self.mailboxLimit = mailboxLimit
         self.ownedMailboxes = ownedMailboxes
+        self.letter = letter
         self.allowance = allowance
         self.notification = notification
     }
@@ -97,10 +104,11 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         expiresAt = try container.decodeIfPresent(String.self, forKey: .expiresAt)
         // Balance is sourced from RC; tolerate a missing server field.
         stampBalance = try container.decodeIfPresent(Int.self, forKey: .stampBalance) ?? 0
-        stampsPerSend = try container.decode(Int.self, forKey: .stampsPerSend)
+        stampPricing = try container.decodeIfPresent(StampPricing.self, forKey: .stampPricing) ?? .default
         unlimitedSends = try container.decode(Bool.self, forKey: .unlimitedSends)
         mailboxLimit = try container.decode(Int.self, forKey: .mailboxLimit)
         ownedMailboxes = try container.decode(Int.self, forKey: .ownedMailboxes)
+        letter = try container.decodeIfPresent(LetterLimitBlock.self, forKey: .letter)
         allowance = try container.decode(StampAllowanceInfo.self, forKey: .allowance)
         notification = try container.decode(NotificationEntitlements.self, forKey: .notification)
     }
@@ -109,8 +117,13 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         ownedMailboxes < mailboxLimit
     }
 
-    var hasStampsToSend: Bool {
-        unlimitedSends || stampBalance >= max(stampsPerSend, 1)
+    /// Stamp cost for a letter of the given size (0 when Plus).
+    func stampCost(byteSize: Int, kind: LetterComposeKind) -> Int {
+        stampPricing.cost(byteSize: byteSize, kind: kind, unlimitedSends: unlimitedSends)
+    }
+
+    func hasStampsToSend(cost: Int) -> Bool {
+        unlimitedSends || stampBalance >= cost
     }
 
     var planTitle: String {
@@ -129,6 +142,23 @@ struct StampAllowanceClaimResponse: Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case credited
         case stampBalance = "stamp_balance"
+        case nextClaimAt = "next_claim_at"
+    }
+}
+
+/// Structured `detail` on HTTP 402 from `POST /api/shipments`.
+struct InsufficientStampsDetail: Codable, Hashable, Sendable {
+    var message: String?
+    var stampBalance: Int?
+    var required: Int?
+    var allowanceClaimable: Bool?
+    var nextClaimAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case stampBalance = "stamp_balance"
+        case required
+        case allowanceClaimable = "allowance_claimable"
         case nextClaimAt = "next_claim_at"
     }
 }

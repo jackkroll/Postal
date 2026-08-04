@@ -112,7 +112,7 @@ extension APIClient {
         }
         guard (200 ..< 300).contains(httpResponse.statusCode) else {
             let message = data.flatMap { APIClient.apiErrorDetail(from: $0) ?? String(data: $0, encoding: .utf8) }
-            throw APIError.httpStatus(httpResponse.statusCode, message)
+            throw APIError.httpStatus(httpResponse.statusCode, message, body: data)
         }
     }
 

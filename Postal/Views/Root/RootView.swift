@@ -28,6 +28,7 @@ struct RootView: View {
         }
         .task(id: authState.userID) {
             if let userID = authState.userID {
+                MapKitWarmup.prepareIfNeeded()
                 await Self.handleSignedIn(userID: userID)
             } else {
                 await Self.handleSignedOut()

@@ -224,10 +224,14 @@ struct LettersListView: View {
                 ForEach(viewmodel.inboundLetters) { letter in
                     NavigationLink(value: ViewRoute.track(
                         trackingNum: letter.trackingNumber,
-                        letter: letter.letterSummary,
+                        letter: letter,
                         isRecipient: true
                     )) {
-                        InboundLetterRowView(letter: letter)
+                        LetterRowView(
+                            letter: letter,
+                            origin: viewmodel.resolved(letter.origin),
+                            destination: viewmodel.resolved(letter.destination)
+                        )
                     }
                 }
             }
@@ -326,7 +330,17 @@ private struct LetterRowView: View {
                 HStack(spacing: 6) {
                     Text(letter.status.displayTitle)
                         .foregroundStyle(letter.status.tintColor)
-                    if let updated = letter.updatedAt ?? letter.createdAt {
+                    if let arrival = letter.expectedArrivalDisplay {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(letter.status == .delivered ? "Arrived \(arrival)" : "ETA \(arrival)")
+                            .foregroundStyle(.secondary)
+                    } else if letter.status == .failed {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text("ETA unavailable")
+                            .foregroundStyle(.secondary)
+                    } else if let updated = letter.updatedAt ?? letter.createdAt {
                         Text("·")
                             .foregroundStyle(.tertiary)
                         Text(updated, format: .relative(presentation: .named, unitsStyle: .abbreviated))
@@ -334,67 +348,6 @@ private struct LetterRowView: View {
                     }
                 }
                 .font(.caption)
-            }
-        }
-        .contextMenu {
-            Button {
-                UIPasteboard.general.string = letter.trackingNumber
-            } label: {
-                Image(systemName: "document.on.document.fill")
-                Text("Copy Tracking Number")
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct InboundLetterRowView: View {
-    let letter: InboundLetterItem
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: letter.status.iconName)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(letter.status.tintColor)
-                .frame(maxWidth: 40, maxHeight: 40)
-                .background(letter.status.tintColor.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(letter.destinationName)
-                    .font(.headline)
-                    .lineLimit(1)
-
-                Text("From \(letter.originName)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                HStack(spacing: 6) {
-                    Text(letter.status.displayTitle)
-                        .foregroundStyle(letter.status.tintColor)
-
-                    if let updated = letter.updatedAt ?? letter.createdAt {
-                        Text("·")
-                            .foregroundStyle(.tertiary)
-                        Text(updated, format: .relative(presentation: .named, unitsStyle: .abbreviated))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if letter.hasLetter, let format = letter.letterFormat {
-                        Text("·")
-                            .foregroundStyle(.tertiary)
-                        Text(format.displayTitle)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .font(.caption)
-
-                Text(letter.trackingNumber)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
             }
         }
         .contextMenu {
@@ -416,7 +369,7 @@ extension LettersListView {
         var draftsStore: DraftLetterStoring
         var letters: [LetterSummary] = []
         var drafts: [LetterDraft] = []
-        var inboundLetters: [InboundLetterItem] = []
+        var inboundLetters: [LetterSummary] = []
         var isLoadingSent = false
         var isLoadingInbound = false
         var sentErrorMessage: String?
@@ -476,9 +429,10 @@ extension LettersListView {
                 defer { isLoadingInbound = false }
 
                 do {
-                    let items = try await api.listInboundLetterItems()
+                    let items = try await api.listInboundLetterSummaries()
                     guard !Task.isCancelled else { return }
                     inboundLetters = items
+                    scheduleEndpointResolution()
                 } catch {
                     guard !Task.isCancelled else { return }
                     inboundErrorMessage = error.localizedDescription
@@ -496,7 +450,7 @@ extension LettersListView {
 
         private func scheduleEndpointResolution() {
             resolutionTask?.cancel()
-            let snapshot = letters
+            let snapshot = letters + inboundLetters
             resolutionTask = Task {
                 await resolveEndpoints(for: snapshot)
             }

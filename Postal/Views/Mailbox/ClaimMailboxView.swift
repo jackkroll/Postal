@@ -68,7 +68,7 @@ struct ClaimMailboxView: View {
         }
         .sheet(isPresented: $isPaywallPresented) {
             PlusPaywallSheet(source: .mailboxLimit) {
-                Task { await viewmodel.refreshEntitlements() }
+                Task { await viewmodel.refreshEntitlementsAfterPurchase() }
             }
         }
     }
@@ -240,6 +240,11 @@ extension ClaimMailboxView {
             await entitlementsService.refresh()
         }
 
+        @MainActor
+        func refreshEntitlementsAfterPurchase() async {
+            await entitlementsService.refreshAfterPurchase()
+        }
+
         func selectPostOffice(_ office: PostOffice) {
             selectedPostOffice = office
             errorMessage = nil
@@ -305,7 +310,7 @@ extension ClaimMailboxView {
                 showSuccess = true
             } catch {
                 errorMessage = error.localizedDescription
-                if case let APIError.httpStatus(code, _) = error, code == 429 {
+                if case let APIError.httpStatus(code, _, _) = error, code == 429 {
                     showsUpgradeOnError = !isSubscriber
                     await entitlementsService.refresh()
                 }

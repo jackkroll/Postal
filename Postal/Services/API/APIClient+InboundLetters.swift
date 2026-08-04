@@ -1,24 +1,24 @@
 import Foundation
 
 extension APIClient {
-    /// Resolves inbound shipment IDs into display rows (best-effort per ID).
-    func listInboundLetterItems(
+    /// Resolves inbound shipment IDs into letter summaries (best-effort per ID).
+    func listInboundLetterSummaries(
         status: ShipmentStatus? = nil,
         limit: Int? = nil
-    ) async throws -> [InboundLetterItem] {
+    ) async throws -> [LetterSummary] {
         let response: InboundLettersResponse = try await get(
             .meInboundLetters(status: status, limit: limit),
             authenticated: true
         )
-        return try await resolveInboundLetterItems(ids: response.letterIDs)
+        return try await resolveInboundLetterSummaries(ids: response.letterIDs)
     }
 
-    /// Resolves inbound letter IDs for one owned mailbox into display rows.
-    func listInboundLetterItems(
+    /// Resolves inbound letter IDs for one owned mailbox into letter summaries.
+    func listInboundLetterSummaries(
         mailboxID: MailboxID,
         status: ShipmentStatus? = nil,
         limit: Int? = nil
-    ) async throws -> [InboundLetterItem] {
+    ) async throws -> [LetterSummary] {
         let response: InboundLettersResponse = try await get(
             .meMailboxInboundLetters(
                 mailboxID: mailboxID.rawValue,
@@ -27,20 +27,20 @@ extension APIClient {
             ),
             authenticated: true
         )
-        return try await resolveInboundLetterItems(ids: response.letterIDs)
+        return try await resolveInboundLetterSummaries(ids: response.letterIDs)
     }
 
-    private func resolveInboundLetterItems(ids: [String]) async throws -> [InboundLetterItem] {
+    private func resolveInboundLetterSummaries(ids: [String]) async throws -> [LetterSummary] {
         guard !ids.isEmpty else { return [] }
 
-        var itemsByID: [String: InboundLetterItem] = [:]
+        var itemsByID: [String: LetterSummary] = [:]
         itemsByID.reserveCapacity(ids.count)
 
-        await withTaskGroup(of: (String, InboundLetterItem?).self) { group in
+        await withTaskGroup(of: (String, LetterSummary?).self) { group in
             for id in ids {
                 group.addTask {
                     let shipment = try? await self.fetchShipment(id: id)
-                    return (id, shipment.map(InboundLetterItem.init(shipment:)))
+                    return (id, shipment.map(LetterSummary.init(shipment:)))
                 }
             }
 

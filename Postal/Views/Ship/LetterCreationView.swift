@@ -202,7 +202,10 @@ struct LetterCreationView: View {
         }
         .sheet(isPresented: $isPaywallPresented) {
             PlusPaywallSheet(source: paywallSource) {
-                Task { await viewmodel.refreshEntitlements() }
+                Task {
+                    await viewmodel.refreshEntitlementsAfterPurchase()
+                    await viewmodel.refreshLimits()
+                }
             }
         }
     }
@@ -880,7 +883,23 @@ extension LetterCreationView {
 
         var needsStampsBeforeSend: Bool {
             guard let entitlements else { return false }
-            return !entitlements.hasStampsToSend
+            return !entitlements.hasStampsToSend(cost: currentStampCost)
+        }
+
+        /// Prefer limits tariff while composing; fall back to entitlements pricing.
+        var currentStampCost: Int {
+            let kind = composeKind ?? .text
+            if let limits {
+                return limits.stampCost(byteSize: contentByteCount, kind: kind)
+            }
+            guard let entitlements else {
+                return StampPricing.default.cost(
+                    byteSize: contentByteCount,
+                    kind: kind,
+                    unlimitedSends: false
+                )
+            }
+            return entitlements.stampCost(byteSize: contentByteCount, kind: kind)
         }
 
         var canClaimStampAllowance: Bool {
@@ -931,11 +950,10 @@ extension LetterCreationView {
             }
 
             let balance = PromoText.stampBalance(entitlements.stampBalance)
-            let costDetail: String? = entitlements.stampsPerSend > 1
-                ? PromoText.stampsPerSend(entitlements.stampsPerSend)
-                : nil
+            let cost = currentStampCost
+            let costDetail: String? = cost > 0 ? PromoText.stampCostForLetter(cost) : nil
 
-            if entitlements.hasStampsToSend {
+            if entitlements.hasStampsToSend(cost: cost) {
                 return StampChipContent(
                     label: balance,
                     detail: costDetail,
@@ -1088,7 +1106,14 @@ extension LetterCreationView {
                     }
                     return PromoText.stampPhaseOutOfStamps
                 }
+                if entitlements?.unlimitedSends == true {
+                    return PromoText.stampPhaseTapToSend
+                }
+                let cost = currentStampCost
                 if let stampBalanceLabel {
+                    if cost > 0 {
+                        return "\(PromoText.stampCostForLetter(cost)). \(PromoText.stampPhaseReady(balanceLabel: stampBalanceLabel))"
+                    }
                     return PromoText.stampPhaseReady(balanceLabel: stampBalanceLabel)
                 }
                 return PromoText.stampPhaseTapToSend
@@ -1151,6 +1176,11 @@ extension LetterCreationView {
         @MainActor
         func refreshEntitlements() async {
             await entitlementsService.refresh()
+        }
+
+        @MainActor
+        func refreshEntitlementsAfterPurchase() async {
+            await entitlementsService.refreshAfterPurchase()
         }
 
         @MainActor
@@ -1499,8 +1529,7 @@ extension LetterCreationView {
                 createdTrackingNumber = response.trackingNumber
                 deleteDraft()
                 if let service = entitlementsService as? EntitlementsService {
-                    let spent = entitlements?.stampsPerSend ?? 1
-                    service.applyLocalStampSpend(spent: spent)
+                    service.applyLocalStampSpend(spent: currentStampCost)
                 }
                 await entitlementsService.refresh()
                 phase = .sent
@@ -1513,9 +1542,19 @@ extension LetterCreationView {
                 guard !Task.isCancelled else { return }
                 showSuccess = true
             } catch {
-                if case let APIError.httpStatus(code, message) = error, code == 402 {
+                if let apiError = error as? APIError,
+                   case let .httpStatus(code, message, _) = apiError,
+                   code == 402 {
                     needsStamps = true
-                    sendErrorMessage = message ?? PromoText.notEnoughStamps
+                    if let detail = apiError.insufficientStampsDetail {
+                        if let required = detail.required, let balance = detail.stampBalance {
+                            sendErrorMessage = "\(detail.message ?? PromoText.notEnoughStamps) Need \(required), have \(balance)."
+                        } else {
+                            sendErrorMessage = detail.message ?? message ?? PromoText.notEnoughStamps
+                        }
+                    } else {
+                        sendErrorMessage = message ?? PromoText.notEnoughStamps
+                    }
                     if let service = entitlementsService as? EntitlementsService {
                         service.invalidateStampBalanceCache()
                     }

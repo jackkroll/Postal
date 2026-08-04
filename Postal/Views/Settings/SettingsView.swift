@@ -35,7 +35,7 @@ struct SettingsView: View {
                     if !entitlements.unlimitedSends {
                         LabeledContent(
                             "Cost",
-                            value: PromoText.stampsPerSend(entitlements.stampsPerSend)
+                            value: PromoText.stampPricingSummary(entitlements.stampPricing)
                         )
                     }
                     LabeledContent(
@@ -241,7 +241,7 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $isPaywallPresented) {
             PlusPaywallSheet(source: paywallSource) {
-                Task { await viewmodel.refresh() }
+                Task { await viewmodel.refreshAfterPurchase() }
             }
         }
         #if DEBUG
@@ -250,7 +250,7 @@ struct SettingsView: View {
         }
         #endif
         .presentCustomerCenter(isPresented: $isCustomerCenterPresented, onDismiss: {
-            Task { await viewmodel.refresh() }
+            Task { await viewmodel.refreshAfterPurchase() }
         })
     }
 
@@ -485,6 +485,28 @@ extension SettingsView {
             errorMessage = nil
 
             await entitlementsService.refresh()
+            await refreshPreferences()
+
+            do {
+                let tokens = try await api.listDeviceTokens()
+                if let deviceToken = push.currentDeviceToken {
+                    registeredSummary = tokens.first(where: { $0.token == deviceToken })
+                } else {
+                    registeredSummary = nil
+                }
+                showSuccess = registeredSummary != nil
+            } catch {
+                // Listing is best-effort; registration can still succeed.
+            }
+        }
+
+        @MainActor
+        func refreshAfterPurchase() async {
+            await push.refreshAuthorizationStatus()
+            authorizationStatus = push.authorizationStatus
+            errorMessage = nil
+
+            await entitlementsService.refreshAfterPurchase()
             await refreshPreferences()
 
             do {

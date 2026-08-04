@@ -36,6 +36,8 @@ final class PreviewEntitlementsService: EntitlementsProviding {
 
     func refresh() async {}
 
+    func refreshAfterPurchase() async {}
+
     func claimStampAllowance() async throws -> StampAllowanceClaimResponse {
         StampAllowanceClaimResponse(credited: 5, stampBalance: 5, nextClaimAt: nil)
     }
@@ -50,10 +52,15 @@ extension UserEntitlements {
         isSubscriber: false,
         expiresAt: nil,
         stampBalance: 3,
-        stampsPerSend: 1,
+        stampPricing: .default,
         unlimitedSends: false,
         mailboxLimit: 1,
         ownedMailboxes: 1,
+        letter: LetterLimitBlock(
+            textMaxBytes: 4_096,
+            drawingMaxBytes: 20_480,
+            subscriber: LetterSizeCaps(textMaxBytes: 12_288, drawingMaxBytes: 61_440)
+        ),
         allowance: StampAllowanceInfo(
             amount: 5,
             intervalSeconds: 604_800,
@@ -76,7 +83,7 @@ extension UserEntitlements {
 extension LettersListView.ViewModel {
     static func preview(
         letters: [LetterSummary] = PreviewData.letters,
-        inboundLetters: [InboundLetterItem] = [],
+        inboundLetters: [LetterSummary] = [],
         drafts: [LetterDraft] = []
     ) -> LettersListView.ViewModel {
         let viewModel = LettersListView.ViewModel(api: APIClient())
@@ -99,6 +106,7 @@ extension TrackingView.ViewModel {
     static func preview(
         trackingNumber: String = "",
         route: TrackingRoute? = nil,
+        trackingInfo: TrackingInfo? = nil,
         letterSummary: LetterSummary? = nil,
         isRecipient: Bool = false,
         errorMessage: String? = nil,
@@ -113,6 +121,12 @@ extension TrackingView.ViewModel {
         )
         viewModel.trackingNumber = trackingNumber
         viewModel.trackingRoute = route
+        viewModel.trackingInfo = trackingInfo
+        viewModel.locationsByCode = [
+            PreviewData.mainStreetLocation.code: PreviewData.mainStreetLocation,
+            PreviewData.westsideLocation.code: PreviewData.westsideLocation,
+            PreviewData.riversideLocation.code: PreviewData.riversideLocation,
+        ]
         viewModel.errorMessage = errorMessage
         viewModel.isLoading = isLoading
         return viewModel

@@ -80,7 +80,7 @@ struct AddressBook: View {
         }
         .sheet(isPresented: $viewmodel.isPaywallPresented) {
             PlusPaywallSheet(source: .mailboxLimit) {
-                Task { await viewmodel.refresh() }
+                Task { await viewmodel.refreshAfterPurchase() }
             }
         }
         .task {
@@ -549,6 +549,13 @@ extension AddressBook {
 
         func refresh() async {
             async let entitlementsFetch: Void = entitlementsService.refresh()
+            async let addressesFetch: Void = fetchAddresses()
+            async let ownedFetch: Void = fetchOwnedMailboxes()
+            _ = await (entitlementsFetch, addressesFetch, ownedFetch)
+        }
+
+        func refreshAfterPurchase() async {
+            async let entitlementsFetch: Void = entitlementsService.refreshAfterPurchase()
             async let addressesFetch: Void = fetchAddresses()
             async let ownedFetch: Void = fetchOwnedMailboxes()
             _ = await (entitlementsFetch, addressesFetch, ownedFetch)

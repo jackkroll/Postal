@@ -2,14 +2,15 @@ import Foundation
 
 enum APIError: LocalizedError {
     case invalidResponse
-    case httpStatus(Int, String?)
+    /// `body` is the raw response for structured detail (e.g. 402 stamp shortage).
+    case httpStatus(Int, String?, body: Data? = nil)
     case decodingFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
             return "The server returned an invalid response."
-        case let .httpStatus(code, message):
+        case let .httpStatus(code, message, _):
             if let message, !message.isEmpty {
                 return "Request failed (\(code)): \(message)"
             }
@@ -17,6 +18,15 @@ enum APIError: LocalizedError {
         case let .decodingFailed(message):
             return message
         }
+    }
+
+    /// Parsed when the server returns a 402 with an object `detail`.
+    var insufficientStampsDetail: InsufficientStampsDetail? {
+        guard case let .httpStatus(402, _, body) = self, let body else { return nil }
+        struct Body: Decodable {
+            let detail: InsufficientStampsDetail
+        }
+        return try? JSONDecoder().decode(Body.self, from: body).detail
     }
 }
 
@@ -128,7 +138,7 @@ final class APIClient {
 
         guard (200 ..< 300).contains(httpResponse.statusCode) else {
             let message = Self.apiErrorDetail(from: data) ?? String(data: data, encoding: .utf8)
-            throw APIError.httpStatus(httpResponse.statusCode, message)
+            throw APIError.httpStatus(httpResponse.statusCode, message, body: data)
         }
 
         return data

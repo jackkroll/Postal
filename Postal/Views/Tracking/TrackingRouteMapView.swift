@@ -44,10 +44,17 @@ struct TrackingRouteMapStop: Identifiable, Hashable {
 
 struct TrackingRouteMapView: View {
     let route: TrackingRoute
+    /// Coordinates from `GET /api/locations/{code}` — live `/route` facilities are id/name only.
+    var locationsByCode: [Int: Location] = [:]
+    var trackingInfo: TrackingInfo? = nil
     var isInteractive: Bool = true
+    /// Wait for MapKit warmup before mounting `Map` so the first paint isn’t a cold hitch.
+    var waitsForWarmup: Bool = true
+
+    @State private var isMapReady = false
 
     private var stops: [TrackingRouteMapStop] {
-        Self.stops(from: route)
+        Self.stops(from: route, locationsByCode: locationsByCode, trackingInfo: trackingInfo)
     }
 
     var body: some View {
@@ -58,12 +65,35 @@ struct TrackingRouteMapView: View {
                     systemImage: "map",
                     description: Text("Facility locations aren’t available for this route yet.")
                 )
-            } else {
+            } else if isMapReady || !waitsForWarmup {
                 mapContent
+            } else {
+                mapPlaceholder
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Route map")
+        .task(id: "\(route.trackingNumber)-\(waitsForWarmup)") {
+            guard waitsForWarmup else {
+                isMapReady = true
+                return
+            }
+            isMapReady = false
+            await MapKitWarmup.prepare()
+            guard !Task.isCancelled else { return }
+            await Task.yield()
+            isMapReady = true
+        }
+    }
+
+    private var mapPlaceholder: some View {
+        ZStack {
+            Rectangle()
+                .fill(route.statusColor().opacity(0.12))
+            ProgressView()
+                .tint(route.statusColor())
+        }
+        .accessibilityLabel("Loading map")
     }
 
     @ViewBuilder
@@ -102,59 +132,106 @@ struct TrackingRouteMapView: View {
         }
     }
 
-    static func stops(from route: TrackingRoute) -> [TrackingRouteMapStop] {
-        var facilitiesByID: [Int: PostOffice] = [:]
-
+    /// Facility IDs that need coordinate lookup for the map.
+    static func facilityIDs(in route: TrackingRoute, trackingInfo: TrackingInfo? = nil) -> Set<Int> {
+        var ids = Set<Int>()
         for event in route.events {
-            guard let facility = event.facility,
-                  facility.lat != nil,
-                  facility.lon != nil
-            else { continue }
-            facilitiesByID[facility.id] = facility
+            if let id = event.facility?.id ?? event.facilityID {
+                ids.insert(id)
+            }
+        }
+        if let currentID = route.currentFacility?.id {
+            ids.insert(currentID)
+        }
+        for entry in route.timeline {
+            ids.insert(entry.facilityID)
+        }
+        if let trackingInfo {
+            ids.insert(trackingInfo.fromPostOffice.id)
+            ids.insert(trackingInfo.toPostOffice.id)
+        }
+        return ids
+    }
+
+    static func stops(
+        from route: TrackingRoute,
+        locationsByCode: [Int: Location] = [:],
+        trackingInfo: TrackingInfo? = nil
+    ) -> [TrackingRouteMapStop] {
+        var namesByID: [Int: String] = [:]
+        var coordinatesByID: [Int: (lat: Double, lon: Double)] = [:]
+
+        func ingest(_ facility: PostOffice) {
+            namesByID[facility.id] = facility.name
+            if let lat = facility.lat, let lon = facility.lon {
+                coordinatesByID[facility.id] = (lat, lon)
+            }
         }
 
-        if let current = route.currentFacility,
-           current.lat != nil,
-           current.lon != nil {
-            facilitiesByID[current.id] = current
+        for event in route.events {
+            if let facility = event.facility {
+                ingest(facility)
+            }
+        }
+        if let current = route.currentFacility {
+            ingest(current)
+        }
+        if let trackingInfo {
+            ingest(trackingInfo.fromPostOffice)
+            ingest(trackingInfo.toPostOffice)
+        }
+
+        for (code, location) in locationsByCode {
+            if namesByID[code] == nil {
+                namesByID[code] = location.name
+            }
+            coordinatesByID[code] = (location.latitude, location.longitude)
         }
 
         var orderedIDs: [Int] = []
         var seen = Set<Int>()
 
+        func appendIfMappable(_ id: Int) {
+            guard coordinatesByID[id] != nil, !seen.contains(id) else { return }
+            orderedIDs.append(id)
+            seen.insert(id)
+        }
+
         for entry in route.timeline {
-            guard facilitiesByID[entry.facilityID] != nil, !seen.contains(entry.facilityID) else { continue }
-            orderedIDs.append(entry.facilityID)
-            seen.insert(entry.facilityID)
+            appendIfMappable(entry.facilityID)
         }
 
         let chronologicalEvents = route.events.sorted {
             eventDate($0) < eventDate($1)
         }
         for event in chronologicalEvents {
-            let facilityID = event.facility?.id ?? event.facilityID
-            guard let facilityID,
-                  facilitiesByID[facilityID] != nil,
-                  !seen.contains(facilityID)
-            else { continue }
-            orderedIDs.append(facilityID)
-            seen.insert(facilityID)
+            if let facilityID = event.facility?.id ?? event.facilityID {
+                appendIfMappable(facilityID)
+            }
         }
 
-        if let currentID = route.currentFacility?.id,
-           facilitiesByID[currentID] != nil,
-           !seen.contains(currentID) {
-            orderedIDs.append(currentID)
+        if let currentID = route.currentFacility?.id {
+            appendIfMappable(currentID)
+        }
+
+        if let trackingInfo {
+            let fromID = trackingInfo.fromPostOffice.id
+            if coordinatesByID[fromID] != nil, !seen.contains(fromID) {
+                orderedIDs.insert(fromID, at: 0)
+                seen.insert(fromID)
+            }
+            let toID = trackingInfo.toPostOffice.id
+            if coordinatesByID[toID] != nil, !seen.contains(toID) {
+                orderedIDs.append(toID)
+                seen.insert(toID)
+            }
         }
 
         let currentID = route.currentFacility?.id
         let lastIndex = orderedIDs.count - 1
 
         return orderedIDs.enumerated().compactMap { index, id in
-            guard let facility = facilitiesByID[id],
-                  let latitude = facility.lat,
-                  let longitude = facility.lon
-            else { return nil }
+            guard let coordinate = coordinatesByID[id] else { return nil }
 
             let kind: TrackingRouteMapStop.Kind
             if orderedIDs.count == 1 {
@@ -169,9 +246,9 @@ struct TrackingRouteMapView: View {
 
             return TrackingRouteMapStop(
                 id: id,
-                name: facility.name,
-                latitude: latitude,
-                longitude: longitude,
+                name: namesByID[id] ?? "Facility \(id)",
+                latitude: coordinate.lat,
+                longitude: coordinate.lon,
                 kind: kind,
                 isCurrent: currentID == id
             )
@@ -218,19 +295,31 @@ struct TrackingRouteMapView: View {
 
 struct TrackingRouteMapDetailView: View {
     let route: TrackingRoute
+    var locationsByCode: [Int: Location] = [:]
+    var trackingInfo: TrackingInfo? = nil
 
     var body: some View {
-        TrackingRouteMapView(route: route, isInteractive: true)
-            .ignoresSafeArea(edges: .bottom)
-            .navigationTitle("Route")
-            .navigationBarTitleDisplayMode(.inline)
+        TrackingRouteMapView(
+            route: route,
+            locationsByCode: locationsByCode,
+            trackingInfo: trackingInfo,
+            isInteractive: true,
+            waitsForWarmup: true
+        )
+        .ignoresSafeArea(edges: .bottom)
+        .navigationTitle("Route")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 #Preview("In Transit Route Map") {
-    TrackingRouteMapView(route: PreviewData.routeInTransit, isInteractive: false)
-        .frame(height: 280)
-        .padding()
+    TrackingRouteMapView(
+        route: PreviewData.routeInTransit,
+        isInteractive: false,
+        waitsForWarmup: false
+    )
+    .frame(height: 280)
+    .padding()
 }
 
 #Preview("Full Screen") {
@@ -240,13 +329,17 @@ struct TrackingRouteMapDetailView: View {
 }
 
 #Preview("Delivered Route Map") {
-    TrackingRouteMapView(route: PreviewData.routeDelivered, isInteractive: false)
-        .frame(height: 280)
-        .padding()
+    TrackingRouteMapView(
+        route: PreviewData.routeDelivered,
+        isInteractive: false,
+        waitsForWarmup: false
+    )
+    .frame(height: 280)
+    .padding()
 }
 
 #Preview("No Coordinates") {
-    TrackingRouteMapView(route: PreviewData.routeNoRouteFound)
+    TrackingRouteMapView(route: PreviewData.routeNoRouteFound, waitsForWarmup: false)
         .frame(height: 280)
         .padding()
 }

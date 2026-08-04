@@ -85,18 +85,4 @@ struct Shipment: Decodable, Identifiable, Hashable {
         }
         return LetterEndpoint(rawValue: "Unknown")
     }
-
-    var originDisplayName: String {
-        if let originBoxID {
-            return "Box \(originBoxID.code)"
-        }
-        return originPostOffice?.name ?? "Unknown origin"
-    }
-
-    var destinationDisplayName: String {
-        if let destinationBoxID {
-            return "Box \(destinationBoxID.code)"
-        }
-        return destinationPostOffice?.name ?? "Unknown destination"
-    }
 }

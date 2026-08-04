@@ -1,38 +1,28 @@
 import Foundation
 
+/// Public tracking summary from `GET /track/{trackingNumber}` (no auth).
+/// Field names are camelCase — unlike auth shipment endpoints.
 struct TrackingInfo: Codable, Hashable {
-    let status: ShipmentStatus
-    let destination: LetterEndpoint
-    let origin: LetterEndpoint
     let trackingNumber: String
+    let status: ShipmentStatus
+    let fromPostOffice: PostOffice
+    let toPostOffice: PostOffice
+    let expectedDeliveryTime: Date?
+    let updatedAt: Date
 
-    enum CodingKeys: String, CodingKey {
-        case status
-        case destination = "to_box"
-        case origin = "from_box"
-        case trackingNumber = "tracking_number"
-    }
-
-    init(status: ShipmentStatus, destination: LetterEndpoint, origin: LetterEndpoint, trackingNumber: String) {
-        self.status = status
-        self.destination = destination
-        self.origin = origin
+    init(
+        trackingNumber: String,
+        status: ShipmentStatus,
+        fromPostOffice: PostOffice,
+        toPostOffice: PostOffice,
+        expectedDeliveryTime: Date?,
+        updatedAt: Date
+    ) {
         self.trackingNumber = trackingNumber
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        status = try container.decode(ShipmentStatus.self, forKey: .status)
-        destination = LetterEndpoint(rawValue: try container.decode(String.self, forKey: .destination))
-        origin = LetterEndpoint(rawValue: try container.decode(String.self, forKey: .origin))
-        trackingNumber = try container.decode(String.self, forKey: .trackingNumber)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(status, forKey: .status)
-        try container.encode(destination.rawValue, forKey: .destination)
-        try container.encode(origin.rawValue, forKey: .origin)
-        try container.encode(trackingNumber, forKey: .trackingNumber)
+        self.status = status
+        self.fromPostOffice = fromPostOffice
+        self.toPostOffice = toPostOffice
+        self.expectedDeliveryTime = expectedDeliveryTime
+        self.updatedAt = updatedAt
     }
 }

@@ -18,6 +18,8 @@ struct RouteTimelineEntry: Codable, Hashable, Identifiable {
 }
 
 struct ShipmentTrackingEvent: Codable, Hashable, Identifiable {
+    /// Server event id from `/track/{id}/route` (`id`).
+    let eventID: Int?
     let eventType: String
     let facility: PostOffice?
     let facilityID: Int?
@@ -25,15 +27,35 @@ struct ShipmentTrackingEvent: Codable, Hashable, Identifiable {
     let recordedAt: Date?
 
     var id: String {
-        "\(eventType)-\(scheduledFor?.timeIntervalSince1970 ?? 0)-\(facility?.id ?? facilityID ?? 0)"
+        if let eventID {
+            return String(eventID)
+        }
+        return "\(eventType)-\(scheduledFor?.timeIntervalSince1970 ?? 0)-\(facility?.id ?? facilityID ?? 0)"
     }
 
     enum CodingKeys: String, CodingKey {
+        case eventID = "id"
         case eventType = "event_type"
         case facility
         case facilityID = "facility_id"
         case scheduledFor = "scheduled_for"
         case recordedAt = "recorded_at"
+    }
+
+    init(
+        eventID: Int? = nil,
+        eventType: String,
+        facility: PostOffice?,
+        facilityID: Int?,
+        scheduledFor: Date?,
+        recordedAt: Date?
+    ) {
+        self.eventID = eventID
+        self.eventType = eventType
+        self.facility = facility
+        self.facilityID = facilityID
+        self.scheduledFor = scheduledFor
+        self.recordedAt = recordedAt
     }
 }
 
@@ -97,7 +119,7 @@ struct TrackingRoute: Codable, Hashable {
 
             var contextParts: [String?] = []
             if let facilityName {
-                if latestEvent?.eventType == "departed_facility" {
+                if latestEvent?.eventType == "departed" || latestEvent?.eventType == "departed_facility" {
                     contextParts.append("Left \(facilityName)")
                 } else {
                     contextParts.append("Last scanned at \(facilityName)")
@@ -139,7 +161,8 @@ struct TrackingRoute: Codable, Hashable {
         case .delivered:
             let deliveredEvent = events.last { $0.eventType == "delivered" } ?? latestEvent
             let deliveredFacility = deliveredEvent?.facility?.name ?? facilityName
-            let deliveredDate = deliveredEvent.map { eventDate($0) }.flatMap { $0 == .distantPast ? nil : $0 }
+            let deliveredDate = deliveredEvent?.recordedAt
+                ?? deliveredEvent.map { eventDate($0) }.flatMap { $0 == .distantPast ? nil : $0 }
 
             return TrackingStatusSummary(
                 title: title,
@@ -200,4 +223,11 @@ struct TrackingStatusSummary {
     let title: String
     let message: String
     let context: String?
+}
+
+extension TrackingRoute {
+    /// Actual delivery time from the `delivered` scan event, when present.
+    var deliveredAt: Date? {
+        events.last { $0.eventType == "delivered" }?.recordedAt
+    }
 }

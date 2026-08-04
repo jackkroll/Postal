@@ -4,6 +4,8 @@ import RevenueCat
 protocol EntitlementsProviding: AnyObject {
     var entitlements: UserEntitlements? { get }
     func refresh() async
+    /// After IAP / restore — hits `POST /api/me/entitlements/refresh` then overlays RC balance.
+    func refreshAfterPurchase() async
     @discardableResult
     func claimStampAllowance() async throws -> StampAllowanceClaimResponse
     func clear()
@@ -39,6 +41,29 @@ final class EntitlementsService: EntitlementsProviding {
             entitlements = next
         } catch {
             lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func refreshAfterPurchase() async {
+        isRefreshing = true
+        lastErrorMessage = nil
+        defer { isRefreshing = false }
+
+        do {
+            invalidateStampBalanceCache()
+            let response = try await api.refreshEntitlements()
+            var next = response.entitlements
+            if !next.unlimitedSends {
+                next.stampBalance = await loadStampBalance(
+                    fallback: entitlements?.stampBalance ?? next.stampBalance
+                )
+            }
+            entitlements = next
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            // Fall back to the read-only entitlements snapshot.
+            await refresh()
         }
     }
 
