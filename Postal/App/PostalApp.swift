@@ -27,8 +27,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
   /// immediately — avoids a cold-start anonymous ID that occasionally never gets replaced.
   private func configurePurchases() {
     guard !Purchases.isConfigured else { return }
-    // Verbose while diagnosing error 23 (StoreKit returns no products on device/TestFlight).
-    Purchases.logLevel = .verbose
+    Purchases.logLevel = .debug
     let apiKey = AppConfiguration.revenueCatAPIKey
     let keyPrefix = String(apiKey.prefix(5))
     if let uid = Auth.auth().currentUser?.uid {
@@ -37,74 +36,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     } else {
       Self.purchasesLog.info("Configuring RC keyPrefix=\(keyPrefix, privacy: .public) appUserID=anonymous")
       Purchases.configure(withAPIKey: apiKey)
-    }
-    Task {
-      await Self.logStoreKitProductsDiagnostics()
-      await Self.logOfferingsDiagnostics()
-    }
-  }
-
-  /// Asks StoreKit 2 directly (bypassing RC) so we can see Apple’s empty-catalog
-  /// response that becomes RevenueCat error 23.
-  private static func logStoreKitProductsDiagnostics() async {
-    let ids: Set<String> = ["plus_monthly", "plus_annual"]
-    purchasesLog.info("StoreKit Product.products request for \(ids.sorted().joined(separator: ","), privacy: .public)")
-    do {
-      let products = try await Product.products(for: ids)
-      let returned = Set(products.map(\.id))
-      let missing = ids.subtracting(returned).sorted()
-      purchasesLog.info("StoreKit returned count=\(products.count) ids=\(returned.sorted().joined(separator: ","), privacy: .public)")
-      for product in products {
-        purchasesLog.info(
-          "StoreKit product \(product.id, privacy: .public) type=\(String(describing: product.type), privacy: .public) price=\(product.displayPrice, privacy: .public)"
-        )
-      }
-      if !missing.isEmpty {
-        purchasesLog.error(
-          "StoreKit missing product IDs (Apple returned empty for these): \(missing.joined(separator: ","), privacy: .public)"
-        )
-      }
-    } catch {
-      let nsError = error as NSError
-      purchasesLog.error(
-        "StoreKit Product.products failed domain=\(nsError.domain, privacy: .public) code=\(nsError.code) \(nsError.localizedDescription, privacy: .public)"
-      )
-    }
-  }
-
-  /// Probes offerings right after configure so Console shows whether RC IDs
-  /// resolved and whether StoreKit returned products (error 23 path).
-  private static func logOfferingsDiagnostics() async {
-    do {
-      let offerings = try await Purchases.shared.offerings()
-      let current = offerings.current
-      let packageCount = current?.availablePackages.count ?? 0
-      purchasesLog.info(
-        "Offerings OK count=\(offerings.all.count) current=\(current?.identifier ?? "nil", privacy: .public) packages=\(packageCount)"
-      )
-      for package in current?.availablePackages ?? [] {
-        purchasesLog.info(
-          "Package \(package.identifier, privacy: .public) product=\(package.storeProduct.productIdentifier, privacy: .public) price=\(package.storeProduct.localizedPriceString, privacy: .public)"
-        )
-      }
-      if current == nil || packageCount == 0 {
-        purchasesLog.error(
-          "Current offering empty after RC fetch — StoreKit likely returned no products for the dashboard IDs"
-        )
-      }
-    } catch {
-      let nsError = error as NSError
-      purchasesLog.error(
-        "Offerings fetch failed domain=\(nsError.domain, privacy: .public) code=\(nsError.code) \(nsError.localizedDescription, privacy: .public)"
-      )
-      if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-        purchasesLog.error(
-          "Underlying domain=\(underlying.domain, privacy: .public) code=\(underlying.code) \(underlying.localizedDescription, privacy: .public)"
-        )
-      }
-      for (key, value) in nsError.userInfo where key != NSUnderlyingErrorKey {
-        purchasesLog.error("userInfo[\(key, privacy: .public)]=\(String(describing: value), privacy: .public)")
-      }
     }
   }
 

@@ -39,11 +39,22 @@ import Observation
     }
 
     /// Replace the stack with the destination for an inbound deep link.
+    ///
+    /// Assigns `path` in one shot. `popToRoot()` + `push()` in the same turn
+    /// is dropped by `NavigationStack` when a track screen is already presented.
     func open(_ deepLink: DeepLink) {
-        popToRoot()
         switch deepLink {
         case let .track(trackingNumber):
-            push(.track(trackingNum: trackingNumber))
+            let route = ViewRoute.track(trackingNum: trackingNumber)
+            // Same destination already on top: clear then re-push so TrackingView remounts.
+            if path == [route] {
+                path = []
+                Task { @MainActor in
+                    self.path = [route]
+                }
+            } else {
+                path = [route]
+            }
         }
     }
 
@@ -53,6 +64,8 @@ import Observation
         case .login:
             SignInView(viewmodel: .init(auth: AppServices.auth))
         case .track(trackingNum: let trackingNum, letter: let letter, isRecipient: let isRecipient):
+            // `.id` forces a fresh ViewModel when replacing one track route with another
+            // at the same stack depth (deep link while already tracking).
             TrackingView(viewmodel: .init(
                 apiClient: AppServices.api,
                 letterService: LetterContentService(api: AppServices.api),
@@ -60,6 +73,7 @@ import Observation
                 letterSummary: letter,
                 isRecipient: isRecipient
             ))
+            .id(trackingNum ?? "")
         case .landing:
             LettersListView()
         case let .ship(origin, destination, draftID):

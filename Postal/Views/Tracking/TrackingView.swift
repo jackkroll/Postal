@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrackingView: View {
     @State var viewmodel: ViewModel
+    @State private var showTrackingCopiedAlert = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -123,10 +124,16 @@ struct TrackingView: View {
             }
             .toolbar {
                 Button {
-                    UIPasteboard.general.string = viewmodel.trackingNumber
+                    UIPasteboard.general.string = DeepLink.trackURL(for: viewmodel.trackingNumber).absoluteString
+                    showTrackingCopiedAlert = true
                 } label: {
                     Label("Copy", systemImage: "document.on.document.fill")
                 }
+            }
+            .alert("Copied", isPresented: $showTrackingCopiedAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Tracking link copied to clipboard.")
             }
         }
     }

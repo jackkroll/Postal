@@ -26,6 +26,31 @@ struct ClaimMailboxRequest: Codable, Hashable {
     }
 }
 
+/// Response from `GET /api/me/mailboxes/{mailbox_id}/relinquish-preview`.
+struct RelinquishMailboxPreview: Codable, Hashable {
+    let mailboxID: MailboxID
+    let inboundLetters: [RelinquishInboundLetter]
+    let willFailCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case mailboxID = "mailbox_id"
+        case inboundLetters = "inbound_letters"
+        case willFailCount = "will_fail_count"
+    }
+}
+
+struct RelinquishInboundLetter: Codable, Identifiable, Hashable {
+    let id: String
+    let status: ShipmentStatus
+    let willFail: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case status
+        case willFail = "will_fail"
+    }
+}
+
 struct MailboxSummary: Codable, Identifiable, Hashable {
     let id: MailboxID
     let postOfficeID: Int

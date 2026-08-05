@@ -93,7 +93,13 @@ struct ClaimMailboxView: View {
     @ViewBuilder
     private var postOfficeList: some View {
         Group {
-            if let errorMessage = viewmodel.errorMessage, viewmodel.postOffices.isEmpty {
+            if let failure = viewmodel.listLoadFailure, viewmodel.postOffices.isEmpty {
+                ContentUnavailableView {
+                    Label(failure.title(resource: "Post Offices"), systemImage: failure.systemImage)
+                } description: {
+                    Text(failure.message)
+                }
+            } else if let errorMessage = viewmodel.errorMessage, viewmodel.postOffices.isEmpty {
                 ContentUnavailableView {
                     Label("Couldn't Load", systemImage: "exclamationmark.triangle")
                 } description: {
@@ -103,7 +109,11 @@ struct ClaimMailboxView: View {
                 ContentUnavailableView.search(text: viewmodel.searchText)
             } else {
                 List(viewmodel.postOffices) { office in
-                    PostOfficeLocationRow(postOffice: office)
+                    Button {
+                        viewmodel.selectPostOffice(office)
+                    } label: {
+                        PostOfficeLocationRow(postOffice: office)
+                    }
                 }
                 .listStyle(.plain)
             }
@@ -172,6 +182,7 @@ extension ClaimMailboxView {
         var isLoadingPostOffices = false
         var hasLoadedPostOffices = false
         var isClaiming = false
+        var listLoadFailure: PostalLoadFailure?
         var errorMessage: String?
         var showSuccess = false
         var showsUpgradeOnError = false
@@ -264,6 +275,7 @@ extension ClaimMailboxView {
                 isLoadingPostOffices = true
             }
             errorMessage = nil
+            listLoadFailure = nil
             defer {
                 if isInitialLoad {
                     isLoadingPostOffices = false
@@ -276,9 +288,12 @@ extension ClaimMailboxView {
                     limit: 100
                 )
                 hasLoadedPostOffices = true
+                listLoadFailure = nil
             } catch {
+                guard !error.isPostalCancellation else { return }
                 postOffices = []
-                errorMessage = error.localizedDescription
+                listLoadFailure = error.postalLoadFailure
+                errorMessage = listLoadFailure?.message
                 hasLoadedPostOffices = true
             }
         }
@@ -309,7 +324,8 @@ extension ClaimMailboxView {
                 await entitlementsService.refresh()
                 showSuccess = true
             } catch {
-                errorMessage = error.localizedDescription
+                guard !error.isPostalCancellation else { return }
+                errorMessage = error.postalLoadFailure.message
                 if case let APIError.httpStatus(code, _, _) = error, code == 429 {
                     showsUpgradeOnError = !isSubscriber
                     await entitlementsService.refresh()

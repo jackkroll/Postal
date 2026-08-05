@@ -83,6 +83,14 @@ struct AddressBook: View {
                 Task { await viewmodel.refreshAfterPurchase() }
             }
         }
+        .sheet(item: $viewmodel.settingsMailbox) { mailbox in
+            MailboxSettingsSheet(
+                mailbox: mailbox,
+                api: viewmodel.api
+            ) {
+                viewmodel.handleRelinquished(mailbox)
+            }
+        }
         .task {
             guard loadsOnAppear else { return }
             await viewmodel.refresh()
@@ -106,7 +114,21 @@ struct AddressBookSelectionList: View {
     var onSelect: (AddressBookEntrySummary) -> Void
 
     var body: some View {
-        if viewmodel.addresses.isEmpty {
+        if let failure = viewmodel.addressesLoadFailure, viewmodel.addresses.isEmpty {
+            ContentUnavailableView {
+                Label(failure.title(resource: "Addresses"), systemImage: failure.systemImage)
+            } description: {
+                Text(failure.message)
+            } actions: {
+                Button("Try Again") {
+                    Task { await viewmodel.fetchAddresses() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        } else if !viewmodel.hasLoadedAddresses, viewmodel.addresses.isEmpty {
+            ProgressView("Loading addresses…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewmodel.addresses.isEmpty {
             ContentUnavailableView {
                 Label("No Addresses Saved", systemImage: "house.fill")
             } description: {
@@ -133,11 +155,23 @@ struct MyMailboxesSection: View {
 
     var body: some View {
         Section {
-            if viewmodel.isLoadingOwned, viewmodel.ownedMailboxes.isEmpty {
+            if viewmodel.isLoadingOwned || (!viewmodel.hasLoadedOwned && viewmodel.ownedMailboxesLoadFailure == nil),
+               viewmodel.ownedMailboxes.isEmpty {
                 HStack {
                     ProgressView()
                     Text("Loading your mailboxes…")
                         .foregroundStyle(.secondary)
+                }
+            } else if let failure = viewmodel.ownedMailboxesLoadFailure, viewmodel.ownedMailboxes.isEmpty {
+                ContentUnavailableView {
+                    Label(failure.title(resource: "Mailboxes"), systemImage: failure.systemImage)
+                } description: {
+                    Text(failure.message)
+                } actions: {
+                    Button("Try Again") {
+                        Task { await viewmodel.fetchOwnedMailboxes() }
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
             } else if viewmodel.ownedMailboxes.isEmpty {
                 ContentUnavailableView {
@@ -160,9 +194,10 @@ struct MyMailboxesSection: View {
                 }
             } else {
                 ForEach(viewmodel.ownedMailboxes) { mailbox in
-                    NavigationLink(value: ViewRoute.ship(origin: mailbox)) {
-                        OwnedMailboxRowView(mailbox: mailbox)
-                    }
+                    OwnedMailboxActionsRow(
+                        mailbox: mailbox,
+                        onSettings: { viewmodel.settingsMailbox = mailbox }
+                    )
                 }
             }
         } header: {
@@ -178,7 +213,24 @@ struct SavedAddressesSection: View {
 
     var body: some View {
         Section {
-            if viewmodel.addresses.isEmpty {
+            if let failure = viewmodel.addressesLoadFailure, viewmodel.addresses.isEmpty {
+                ContentUnavailableView {
+                    Label(failure.title(resource: "Addresses"), systemImage: failure.systemImage)
+                } description: {
+                    Text(failure.message)
+                } actions: {
+                    Button("Try Again") {
+                        Task { await viewmodel.fetchAddresses() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            } else if !viewmodel.hasLoadedAddresses, viewmodel.addresses.isEmpty {
+                HStack {
+                    ProgressView()
+                    Text("Loading addresses…")
+                        .foregroundStyle(.secondary)
+                }
+            } else if viewmodel.addresses.isEmpty {
                 SavedAddressesEmptyContent(
                     isSelecting: onSelect != nil,
                     onAdd: { viewmodel.presentAdd() }
@@ -468,6 +520,38 @@ struct AddressEditView: View {
     }
 }
 
+struct OwnedMailboxActionsRow: View {
+    @Environment(Router.self) private var router: Router?
+
+    let mailbox: MailboxSummary
+    var onSettings: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            OwnedMailboxRowView(mailbox: mailbox)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                onSettings()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonBorderShape(.circle)
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Settings")
+
+            Button {
+                router?.push(.ship(origin: mailbox))
+            } label: {
+                Image(systemName: "paperplane.fill")
+            }
+            .buttonBorderShape(.circle)
+            .buttonStyle(.borderedProminent)
+            .accessibilityLabel("Send")
+        }
+    }
+}
+
 struct OwnedMailboxRowView: View {
     let mailbox: MailboxSummary
 
@@ -520,8 +604,13 @@ extension AddressBook {
         var addresses: [AddressBookEntrySummary]
         var ownedMailboxes: [MailboxSummary]
         var isLoadingOwned = false
+        var hasLoadedOwned = false
+        var hasLoadedAddresses = false
+        var addressesLoadFailure: PostalLoadFailure?
+        var ownedMailboxesLoadFailure: PostalLoadFailure?
         var errorMsg: String?
         var editor: AddressEditorMode?
+        var settingsMailbox: MailboxSummary?
         var isPaywallPresented = false
 
         init(
@@ -564,8 +653,12 @@ extension AddressBook {
         func fetchAddresses() async {
             do {
                 addresses = try await api.listAddressBook()
+                addressesLoadFailure = nil
+                hasLoadedAddresses = true
             } catch {
-                errorMsg = "Failed to fetch address book"
+                guard !error.isPostalCancellation else { return }
+                addressesLoadFailure = error.postalLoadFailure
+                errorMsg = addressesLoadFailure?.message
             }
         }
 
@@ -574,8 +667,12 @@ extension AddressBook {
             defer { isLoadingOwned = false }
             do {
                 ownedMailboxes = try await api.listOwnedMailboxes()
+                ownedMailboxesLoadFailure = nil
+                hasLoadedOwned = true
             } catch {
-                errorMsg = "Failed to fetch mailboxes"
+                guard !error.isPostalCancellation else { return }
+                ownedMailboxesLoadFailure = error.postalLoadFailure
+                errorMsg = ownedMailboxesLoadFailure?.message
             }
         }
 
@@ -584,6 +681,16 @@ extension AddressBook {
                 addresses[index] = entry
             } else {
                 addresses.insert(entry, at: 0)
+            }
+        }
+
+        func handleRelinquished(_ mailbox: MailboxSummary) {
+            ownedMailboxes.removeAll { $0.id == mailbox.id }
+            settingsMailbox = nil
+            Task {
+                async let entitlementsFetch: Void = entitlementsService.refresh()
+                async let ownedFetch: Void = fetchOwnedMailboxes()
+                _ = await (entitlementsFetch, ownedFetch)
             }
         }
 

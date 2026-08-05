@@ -56,6 +56,7 @@ struct LetterCreationView: View {
     @State private var pendingClaimBoxNavigation = false
     @State private var isPaywallPresented = false
     @State private var paywallSource: PaywallSource = .stampPhase
+    @State private var showTrackingCopiedAlert = false
     private let loadsOnAppear: Bool
 
     init(
@@ -153,7 +154,11 @@ struct LetterCreationView: View {
             Button("Done") { dismiss() }
             if let tracking = viewmodel.createdTrackingNumber {
                 Button("Copy Tracking") {
-                    UIPasteboard.general.string = tracking
+                    UIPasteboard.general.string = DeepLink.trackURL(for: tracking).absoluteString
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        showTrackingCopiedAlert = true
+                    }
                 }
             }
         } message: {
@@ -162,6 +167,12 @@ struct LetterCreationView: View {
             } else {
                 Text("Your letter is on its way.")
             }
+        }
+        .alert("Copied", isPresented: $showTrackingCopiedAlert) {
+            Button("OK", role: .cancel) {}
+            Button("Done") { dismiss() }
+        } message: {
+            Text("Tracking link copied to clipboard.")
         }
         .alert("Couldn't Send", isPresented: Binding(
             get: { viewmodel.sendErrorMessage != nil },
@@ -1169,7 +1180,7 @@ extension LetterCreationView {
                     self.selectedOriginMailboxID = nil
                 }
             } catch {
-                loadErrorMessage = error.localizedDescription
+                loadErrorMessage = error.postalLoadFailure.message
             }
         }
 

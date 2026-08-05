@@ -17,6 +17,7 @@ struct DestinationMailboxPickerSheet: View {
     @State private var isLoadingPostOffices = false
     @State private var isValidatingMailbox = false
     @State private var hasLoadedPostOffices = false
+    @State private var loadFailure: PostalLoadFailure?
     @State private var errorMessage: String?
 
     init(
@@ -53,7 +54,7 @@ struct DestinationMailboxPickerSheet: View {
                         postOffices: postOffices,
                         searchText: $searchText,
                         isLoading: isLoadingPostOffices,
-                        errorMessage: errorMessage,
+                        loadFailure: loadFailure,
                         onRetry: { Task { await searchPostOffices() } },
                         onSelect: selectPostOffice(_:)
                     )
@@ -145,6 +146,7 @@ struct DestinationMailboxPickerSheet: View {
             isLoadingPostOffices = true
         }
         errorMessage = nil
+        loadFailure = nil
         defer {
             if isInitialLoad {
                 isLoadingPostOffices = false
@@ -159,6 +161,7 @@ struct DestinationMailboxPickerSheet: View {
             try Task.checkCancellation()
             postOffices = offices
             hasLoadedPostOffices = true
+            loadFailure = nil
         } catch is CancellationError {
             // Debounced `.task(id:)` cancels in-flight work when the query changes.
         } catch let error as URLError where error.code == .cancelled {
@@ -166,7 +169,7 @@ struct DestinationMailboxPickerSheet: View {
         } catch {
             guard !Task.isCancelled else { return }
             postOffices = []
-            errorMessage = error.localizedDescription
+            loadFailure = error.postalLoadFailure
             hasLoadedPostOffices = true
         }
     }
@@ -194,7 +197,7 @@ struct DestinationMailboxPickerSheet: View {
         } catch let error as MailboxLookupError {
             errorMessage = error.localizedDescription
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.postalLoadFailure.message
         }
     }
 }
@@ -205,17 +208,17 @@ private struct PostOfficeListView: View {
     let postOffices: [PostOffice]
     @Binding var searchText: String
     let isLoading: Bool
-    let errorMessage: String?
+    let loadFailure: PostalLoadFailure?
     let onRetry: () -> Void
     let onSelect: (PostOffice) -> Void
 
     var body: some View {
         Group {
-            if let errorMessage, postOffices.isEmpty, !isLoading {
+            if let loadFailure, postOffices.isEmpty, !isLoading {
                 ContentUnavailableView {
-                    Label("Couldn't Load", systemImage: "exclamationmark.triangle")
+                    Label(loadFailure.title(resource: "Post Offices"), systemImage: loadFailure.systemImage)
                 } description: {
-                    Text(errorMessage)
+                    Text(loadFailure.message)
                 } actions: {
                     Button("Try Again", action: onRetry)
                 }

@@ -15,6 +15,17 @@ final class FirebaseAuthService: AuthProviding {
         return try await user.getIDTokenResult(forcingRefresh: forceRefresh).token
     }
 
+    func signInWithApple(
+        idToken: String,
+        rawNonce: String
+    ) async throws {
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idToken,
+            rawNonce: rawNonce, fullName: nil
+        )
+        _ = try await Auth.auth().signIn(with: credential)
+    }
+
     func signIn(email: String, password: String) async throws {
         _ = try await Auth.auth().signIn(withEmail: email, password: password)
     }

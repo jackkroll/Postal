@@ -118,21 +118,12 @@ struct LettersListView: View {
 
     @ViewBuilder
     private var sentContent: some View {
-        if viewmodel.isLoadingSent, viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
+        if viewmodel.shouldShowSentLoading {
             ProgressView("Loading letters…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = viewmodel.sentErrorMessage, viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
-            ContentUnavailableView {
-                Label("Couldn't Load Letters", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(errorMessage)
-            } actions: {
-                Button("Try Again") {
-                    Task { await viewmodel.loadSentLetters() }
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        } else if viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
+        } else if let failure = viewmodel.sentLoadFailure, viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
+            sentFailureView(failure)
+        } else if viewmodel.hasLoadedSent, viewmodel.letters.isEmpty, viewmodel.drafts.isEmpty {
             ContentUnavailableView {
                 Label("No Letters Yet", systemImage: "envelope.open")
             } description: {
@@ -143,6 +134,19 @@ struct LettersListView: View {
             }
         } else {
             List {
+                if let failure = viewmodel.sentLoadFailure, viewmodel.letters.isEmpty {
+                    Section {
+                        Label(failure.title(resource: "Letters"), systemImage: failure.systemImage)
+                            .foregroundStyle(.primary)
+                        Text(failure.message)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button("Try Again") {
+                            Task { await viewmodel.loadSentLetters() }
+                        }
+                    }
+                }
+
                 if !viewmodel.drafts.isEmpty {
                     Section("Drafts") {
                         ForEach(viewmodel.drafts) { draft in
@@ -156,7 +160,7 @@ struct LettersListView: View {
                     }
 
                     Section("Sent") {
-                        if viewmodel.letters.isEmpty {
+                        if viewmodel.letters.isEmpty, viewmodel.sentLoadFailure == nil {
                             Text("No sent letters yet.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -199,21 +203,12 @@ struct LettersListView: View {
 
     @ViewBuilder
     private var inboundContent: some View {
-        if viewmodel.isLoadingInbound, viewmodel.inboundLetters.isEmpty {
+        if viewmodel.shouldShowInboundLoading {
             ProgressView("Loading inbound letters…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = viewmodel.inboundErrorMessage, viewmodel.inboundLetters.isEmpty {
-            ContentUnavailableView {
-                Label("Couldn't Load Inbound", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(errorMessage)
-            } actions: {
-                Button("Try Again") {
-                    Task { await viewmodel.loadInboundLetters() }
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        } else if viewmodel.inboundLetters.isEmpty {
+        } else if let failure = viewmodel.inboundLoadFailure, viewmodel.inboundLetters.isEmpty {
+            inboundFailureView(failure)
+        } else if viewmodel.hasLoadedInbound, viewmodel.inboundLetters.isEmpty {
             ContentUnavailableView {
                 Label("No Inbound Letters", systemImage: "tray")
             } description: {
@@ -244,6 +239,32 @@ struct LettersListView: View {
                         .padding(.top, 8)
                 }
             }
+        }
+    }
+
+    private func sentFailureView(_ failure: PostalLoadFailure) -> some View {
+        ContentUnavailableView {
+            Label(failure.title(resource: "Letters"), systemImage: failure.systemImage)
+        } description: {
+            Text(failure.message)
+        } actions: {
+            Button("Try Again") {
+                Task { await viewmodel.loadSentLetters() }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private func inboundFailureView(_ failure: PostalLoadFailure) -> some View {
+        ContentUnavailableView {
+            Label(failure.title(resource: "Inbound"), systemImage: failure.systemImage)
+        } description: {
+            Text(failure.message)
+        } actions: {
+            Button("Try Again") {
+                Task { await viewmodel.loadInboundLetters() }
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 }
@@ -300,6 +321,7 @@ private struct LetterRowView: View {
     let letter: LetterSummary
     let origin: ResolvedLetterEndpoint
     let destination: ResolvedLetterEndpoint
+    @State private var showTrackingCopiedAlert = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -352,11 +374,17 @@ private struct LetterRowView: View {
         }
         .contextMenu {
             Button {
-                UIPasteboard.general.string = letter.trackingNumber
+                UIPasteboard.general.string = DeepLink.trackURL(for: letter.trackingNumber).absoluteString
+                showTrackingCopiedAlert = true
             } label: {
                 Image(systemName: "document.on.document.fill")
                 Text("Copy Tracking Number")
             }
+        }
+        .alert("Copied", isPresented: $showTrackingCopiedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Tracking link copied to clipboard.")
         }
         .padding(.vertical, 2)
     }
@@ -372,8 +400,10 @@ extension LettersListView {
         var inboundLetters: [LetterSummary] = []
         var isLoadingSent = false
         var isLoadingInbound = false
-        var sentErrorMessage: String?
-        var inboundErrorMessage: String?
+        var hasLoadedSent = false
+        var hasLoadedInbound = false
+        var sentLoadFailure: PostalLoadFailure?
+        var inboundLoadFailure: PostalLoadFailure?
         var mailboxesByID: [MailboxID: MailboxSummary] = [:]
         var locationsByCode: [Int: Location] = [:]
 
@@ -384,6 +414,14 @@ extension LettersListView {
         init(api: APIClient, draftsStore: DraftLetterStoring = AppServices.letterDrafts) {
             self.api = api
             self.draftsStore = draftsStore
+        }
+
+        var shouldShowSentLoading: Bool {
+            (isLoadingSent || !hasLoadedSent) && letters.isEmpty && drafts.isEmpty && sentLoadFailure == nil
+        }
+
+        var shouldShowInboundLoading: Bool {
+            (isLoadingInbound || !hasLoadedInbound) && inboundLetters.isEmpty && inboundLoadFailure == nil
         }
 
         func loadDrafts() {
@@ -403,17 +441,18 @@ extension LettersListView {
             sentLoadTask?.cancel()
             let task = Task { @MainActor in
                 isLoadingSent = true
-                sentErrorMessage = nil
                 defer { isLoadingSent = false }
 
                 do {
                     let items = try await api.listSentLetterSummaries()
                     guard !Task.isCancelled else { return }
                     letters = items
+                    sentLoadFailure = nil
+                    hasLoadedSent = true
                     scheduleEndpointResolution()
                 } catch {
-                    guard !Task.isCancelled else { return }
-                    sentErrorMessage = error.localizedDescription
+                    guard !error.isPostalCancellation, !Task.isCancelled else { return }
+                    sentLoadFailure = error.postalLoadFailure
                 }
             }
             sentLoadTask = task
@@ -425,17 +464,18 @@ extension LettersListView {
             inboundLoadTask?.cancel()
             let task = Task { @MainActor in
                 isLoadingInbound = true
-                inboundErrorMessage = nil
                 defer { isLoadingInbound = false }
 
                 do {
                     let items = try await api.listInboundLetterSummaries()
                     guard !Task.isCancelled else { return }
                     inboundLetters = items
+                    inboundLoadFailure = nil
+                    hasLoadedInbound = true
                     scheduleEndpointResolution()
                 } catch {
-                    guard !Task.isCancelled else { return }
-                    inboundErrorMessage = error.localizedDescription
+                    guard !error.isPostalCancellation, !Task.isCancelled else { return }
+                    inboundLoadFailure = error.postalLoadFailure
                 }
             }
             inboundLoadTask = task

@@ -7,6 +7,8 @@ enum APIEndpoint {
     case deleteMyAccount
     case meMailboxes
     case claimMailbox
+    case relinquishMailboxPreview(mailboxID: String)
+    case deleteMailbox(mailboxID: String)
     case meDeviceTokens
     case registerDeviceToken
     case unregisterDeviceToken
@@ -46,6 +48,10 @@ enum APIEndpoint {
             return "/api/me"
         case .meMailboxes, .claimMailbox:
             return "/api/me/mailboxes"
+        case let .relinquishMailboxPreview(mailboxID):
+            return "/api/me/mailboxes/\(mailboxID)/relinquish-preview"
+        case let .deleteMailbox(mailboxID):
+            return "/api/me/mailboxes/\(mailboxID)"
         case .meDeviceTokens, .registerDeviceToken, .unregisterDeviceToken:
             return "/api/me/device-tokens"
         case .meNotificationPreferences, .updateNotificationPreferences:
@@ -95,7 +101,7 @@ enum APIEndpoint {
             return "POST"
         case .updateNotificationPreferences, .updateAddressEntry:
             return "PUT"
-        case .unregisterDeviceToken, .deleteMyAccount, .deleteAddressEntry:
+        case .unregisterDeviceToken, .deleteMyAccount, .deleteAddressEntry, .deleteMailbox:
             return "DELETE"
         case .shipmentLetter:
             return "GET"

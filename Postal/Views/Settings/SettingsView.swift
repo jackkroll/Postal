@@ -466,12 +466,12 @@ extension SettingsView {
 
         var footerText: String {
             if authorizationStatus == .denied {
-                return "Notifications are off for Postal. Enable them in iOS Settings, then come back here."
+                return "Notifications are off. Enable them in iOS Settings, then come back here."
             }
             if isRegistered {
                 return "This device receives shipment updates. Disable to stop notifications here."
             }
-            return "Get notified when your shipments move. Postal will ask for permission, then register this device with the server."
+            return "Get notified when your shipments move."
         }
 
         var preferencesFooterText: String {

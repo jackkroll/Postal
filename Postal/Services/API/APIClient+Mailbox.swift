@@ -14,6 +14,20 @@ extension APIClient {
         )
     }
 
+    func relinquishMailboxPreview(mailboxID: MailboxID) async throws -> RelinquishMailboxPreview {
+        try await get(
+            .relinquishMailboxPreview(mailboxID: mailboxID.rawValue),
+            authenticated: true
+        )
+    }
+
+    func relinquishMailbox(mailboxID: MailboxID) async throws {
+        try await delete(
+            .deleteMailbox(mailboxID: mailboxID.rawValue),
+            authenticated: true
+        )
+    }
+
     func listPostOffices(search: String? = nil, limit: Int? = nil) async throws -> [PostOffice] {
         // Mirror shipments clamp so an oversized limit cannot 422 the endpoint.
         let resolvedLimit = max(min(limit ?? 100, 100), 1)

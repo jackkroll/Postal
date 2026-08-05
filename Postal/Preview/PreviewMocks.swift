@@ -25,6 +25,10 @@ final class PreviewAuthService: AuthProviding {
     var currentUserID: String? = "preview-user-id"
     var isSignedIn: Bool = true
 
+    func signInWithApple(
+        idToken: String,
+        rawNonce: String
+    ) async throws {}
     func signIn(email: String, password: String) async throws {}
     func signOut() throws {}
     func idToken(forceRefresh: Bool) async throws -> String? { "preview-token" }
@@ -90,6 +94,8 @@ extension LettersListView.ViewModel {
         viewModel.letters = letters
         viewModel.inboundLetters = inboundLetters
         viewModel.drafts = drafts
+        viewModel.hasLoadedSent = true
+        viewModel.hasLoadedInbound = true
         viewModel.mailboxesByID = Dictionary(
             uniqueKeysWithValues: PreviewData.allMailboxes.map { ($0.id, $0) }
         )
@@ -135,8 +141,6 @@ extension TrackingView.ViewModel {
 
 extension SignInView.ViewModel {
     static func preview(
-        email: String = "",
-        password: String = "",
         errorMessage: String? = nil,
         isLoading: Bool = false,
         isSignedIn: Bool = false
@@ -146,8 +150,6 @@ extension SignInView.ViewModel {
         auth.currentUserID = isSignedIn ? "preview-user-id" : nil
 
         let viewModel = SignInView.ViewModel(auth: auth)
-        viewModel.email = email
-        viewModel.password = password
         viewModel.errorMessage = errorMessage
         viewModel.isLoading = isLoading
         return viewModel
@@ -277,6 +279,8 @@ extension AddressBook.ViewModel {
         let viewModel = AddressBook.ViewModel(api: APIClient())
         viewModel.addresses = addresses
         viewModel.ownedMailboxes = ownedMailboxes
+        viewModel.hasLoadedOwned = true
+        viewModel.hasLoadedAddresses = true
         return viewModel
     }
 }
