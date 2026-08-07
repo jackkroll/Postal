@@ -49,14 +49,12 @@ enum LetterSheetPlacement: Equatable {
 }
 
 struct LetterCreationView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(Router.self) private var router: Router?
     @State private var viewmodel: ViewModel
     @State private var pendingClaimBoxNavigation = false
     @State private var isPaywallPresented = false
     @State private var paywallSource: PaywallSource = .stampPhase
-    @State private var showTrackingCopiedAlert = false
     private let loadsOnAppear: Bool
 
     init(
@@ -150,29 +148,15 @@ struct LetterCreationView: View {
             guard current == nil, let previous else { return }
             viewmodel.handleComposerDismissed(previous)
         }
-        .alert("Letter Sent", isPresented: $viewmodel.showSuccess) {
-            Button("Done") { dismiss() }
-            if let tracking = viewmodel.createdTrackingNumber {
-                Button("Copy Tracking") {
-                    UIPasteboard.general.string = DeepLink.trackURL(for: tracking).absoluteString
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 300_000_000)
-                        showTrackingCopiedAlert = true
-                    }
-                }
-            }
-        } message: {
-            if let tracking = viewmodel.createdTrackingNumber {
-                Text("Tracking number: \(tracking)")
-            } else {
-                Text("Your letter is on its way.")
-            }
-        }
-        .alert("Copied", isPresented: $showTrackingCopiedAlert) {
-            Button("OK", role: .cancel) {}
-            Button("Done") { dismiss() }
-        } message: {
-            Text("Tracking link copied to clipboard.")
+        .onChange(of: viewmodel.createdTrackingNumber) { _, trackingNumber in
+            guard let trackingNumber else { return }
+            router?.replaceStack(
+                with: .track(
+                    trackingNum: trackingNumber,
+                    letter: viewmodel.sentLetterSummary,
+                    isRecipient: false
+                )
+            )
         }
         .alert("Couldn't Send", isPresented: Binding(
             get: { viewmodel.sendErrorMessage != nil },
@@ -216,8 +200,35 @@ struct LetterCreationView: View {
                 Task {
                     await viewmodel.refreshEntitlementsAfterPurchase()
                     await viewmodel.refreshLimits()
+                    viewmodel.presentSendConfirmation()
                 }
             }
+        }
+        .sheet(isPresented: $viewmodel.isSendConfirmationPresented, onDismiss: {
+            viewmodel.handleSendConfirmationDismissed()
+        }) {
+            SendConfirmationSheet(
+                stampCost: viewmodel.currentStampCost,
+                stampBalance: viewmodel.entitlements?.unlimitedSends == true
+                    ? nil
+                    : viewmodel.entitlements?.stampBalance,
+                unlimitedSends: viewmodel.entitlements?.unlimitedSends == true,
+                scheduling: viewmodel.schedulingEntitlements,
+                routeEstimate: viewmodel.routeEstimate,
+                isLoadingEstimate: viewmodel.isLoadingRouteEstimate,
+                estimateError: viewmodel.routeEstimateError,
+                selectedTiming: $viewmodel.selectedSendTiming,
+                customDeliverAt: $viewmodel.customDeliverAt,
+                onConfirm: {
+                    viewmodel.confirmSendFromSheet()
+                },
+                onUpgrade: viewmodel.entitlements?.unlimitedSends == true
+                    ? nil
+                    : {
+                        viewmodel.isSendConfirmationPresented = false
+                        presentPaywall(source: .stampPhase)
+                    }
+            )
         }
     }
 
@@ -558,7 +569,38 @@ private struct LetterCreationChrome: View {
                     }
                 }
 
-                stepNavigationRow(showContinue: false)
+                HStack(spacing: 12) {
+                    if viewmodel.canGoBack {
+                        Button {
+                            viewmodel.enqueueBack()
+                        } label: {
+                            Label("Back", systemImage: "chevron.backward")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    if !viewmodel.needsStampsBeforeSend {
+                        Button {
+                            viewmodel.reopenSendConfirmation()
+                        } label: {
+                            Label(
+                                viewmodel.hasConfirmedSendTiming
+                                    ? PromoText.sendConfirmationEdit
+                                    : PromoText.sendConfirmationReopen,
+                                systemImage: "slider.horizontal.3"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(
+                            !viewmodel.canSend
+                                || viewmodel.isSending
+                                || viewmodel.isClaimingAllowance
+                                || viewmodel.isSendConfirmationPresented
+                        )
+                    }
+                }
             }
         case .sending:
             ProgressView("Sending…")
@@ -719,8 +761,19 @@ extension LetterCreationView {
         var sendErrorMessage: String?
         var needsStamps = false
         var createdTrackingNumber: String?
-        var showSuccess = false
+        /// Snapshot passed into tracking after a successful send.
+        var sentLetterSummary: LetterSummary?
         var limits: LetterLimits?
+
+        var isSendConfirmationPresented = false
+        var selectedSendTiming: LetterSendTimingOption?
+        var customDeliverAt = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+        var routeEstimate: ShipmentEstimate?
+        var isLoadingRouteEstimate = false
+        var routeEstimateError: String?
+        /// Set only after the confirmation sheet completes (may be `nil` for natural delivery).
+        private var pendingSendSchedule: ShipmentSchedule?
+        private(set) var hasConfirmedSendTiming = false
 
         private(set) var viewportSize: CGSize = .zero
         private(set) var stageSize: CGSize = .zero
@@ -915,6 +968,13 @@ extension LetterCreationView {
 
         var canClaimStampAllowance: Bool {
             entitlements?.allowance.claimable == true
+        }
+
+        /// Prefer limits while composing; fall back to entitlements / free defaults.
+        var schedulingEntitlements: SchedulingEntitlements {
+            limits?.scheduling
+                ?? entitlements?.scheduling
+                ?? .freeDefaults
         }
 
         var stampBalanceLabel: String? {
@@ -1117,17 +1177,10 @@ extension LetterCreationView {
                     }
                     return PromoText.stampPhaseOutOfStamps
                 }
-                if entitlements?.unlimitedSends == true {
+                if hasConfirmedSendTiming {
                     return PromoText.stampPhaseTapToSend
                 }
-                let cost = currentStampCost
-                if let stampBalanceLabel {
-                    if cost > 0 {
-                        return "\(PromoText.stampCostForLetter(cost)). \(PromoText.stampPhaseReady(balanceLabel: stampBalanceLabel))"
-                    }
-                    return PromoText.stampPhaseReady(balanceLabel: stampBalanceLabel)
-                }
-                return PromoText.stampPhaseTapToSend
+                return PromoText.stampPhaseReviewSend
             case .sending:
                 return "Sending…"
             case .sent:
@@ -1212,6 +1265,9 @@ extension LetterCreationView {
 
             do {
                 _ = try await entitlementsService.claimStampAllowance()
+                if phase == .stamp {
+                    presentSendConfirmation()
+                }
             } catch {
                 sendErrorMessage = error.localizedDescription
             }
@@ -1229,6 +1285,9 @@ extension LetterCreationView {
                 try? await Task.sleep(for: .milliseconds(320))
                 guard !Task.isCancelled else { return }
                 refreshCamera(animated: true)
+                if phase == .stamp {
+                    presentSendConfirmation()
+                }
                 return
             }
 
@@ -1401,6 +1460,101 @@ extension LetterCreationView {
         }
 
         @MainActor
+        func presentSendConfirmation() {
+            guard phase == .stamp, canSend, !isStampApplied, !isSending else { return }
+            guard !needsStampsBeforeSend else { return }
+            guard !isSendConfirmationPresented else { return }
+
+            selectedSendTiming = nil
+            pendingSendSchedule = nil
+            hasConfirmedSendTiming = false
+            routeEstimate = nil
+            routeEstimateError = nil
+            isSendConfirmationPresented = true
+            Task { await loadRouteEstimateIfNeeded() }
+        }
+
+        /// Re-open the sheet without wiping a prior choice (edit / change of mind).
+        @MainActor
+        func reopenSendConfirmation() {
+            guard phase == .stamp, canSend, !isStampApplied, !isSending else { return }
+            guard !needsStampsBeforeSend else { return }
+            guard !isSendConfirmationPresented else { return }
+
+            routeEstimateError = nil
+            isSendConfirmationPresented = true
+            Task { await loadRouteEstimateIfNeeded() }
+        }
+
+        @MainActor
+        func confirmSendFromSheet() {
+            guard let selectedSendTiming else { return }
+
+            let schedule: ShipmentSchedule?
+            switch selectedSendTiming {
+            case .natural:
+                schedule = nil
+            case let .preset(preset):
+                schedule = .preset(preset)
+            case .custom:
+                guard schedulingEntitlements.customDeliverAt else { return }
+                let minimum = max(routeEstimate?.expectedDeliveryTime ?? .now, .now)
+                guard customDeliverAt >= minimum else {
+                    routeEstimateError = PromoText.sendTimingHoldTooEarly
+                    return
+                }
+                schedule = .deliverAt(customDeliverAt)
+            }
+
+            pendingSendSchedule = schedule
+            hasConfirmedSendTiming = true
+            isSendConfirmationPresented = false
+        }
+
+        func handleSendConfirmationDismissed() {
+            if hasConfirmedSendTiming {
+                // Cancel after editing — restore the last confirmed choice.
+                selectedSendTiming = timingOption(matching: pendingSendSchedule)
+                return
+            }
+            selectedSendTiming = nil
+            pendingSendSchedule = nil
+        }
+
+        private func timingOption(matching schedule: ShipmentSchedule?) -> LetterSendTimingOption {
+            switch schedule {
+            case nil: .natural
+            case let .preset(preset): .preset(preset)
+            case .deliverAt: .custom
+            }
+        }
+
+        @MainActor
+        private func loadRouteEstimateIfNeeded() async {
+            // Needed for Plus custom-date clamping (and ETA footer).
+            guard schedulingEntitlements.routeEstimate || schedulingEntitlements.customDeliverAt,
+                  let origin = selectedOriginMailbox,
+                  let destination = selectedDestinationMailbox
+            else { return }
+
+            isLoadingRouteEstimate = true
+            routeEstimateError = nil
+            defer { isLoadingRouteEstimate = false }
+
+            do {
+                routeEstimate = try await api.estimateShipment(
+                    originBoxID: origin.id,
+                    destinationBoxID: destination.id
+                )
+                if let eta = routeEstimate?.expectedDeliveryTime {
+                    customDeliverAt = max(customDeliverAt, eta, .now)
+                }
+            } catch {
+                routeEstimate = nil
+            }
+        }
+
+        @MainActor
         func applyStampAndSend() async {
             guard phase == .stamp, canSend, !isStampApplied, !isSending else { return }
 
@@ -1410,6 +1564,11 @@ extension LetterCreationView {
                 sendErrorMessage = canClaimStampAllowance
                     ? PromoText.notEnoughStampsClaimOrUpgrade
                     : PromoText.notEnoughStamps
+                return
+            }
+
+            guard hasConfirmedSendTiming else {
+                presentSendConfirmation()
                 return
             }
 
@@ -1432,11 +1591,15 @@ extension LetterCreationView {
             phase = .stamp
             sendErrorMessage = nil
             needsStamps = false
+            hasConfirmedSendTiming = false
+            pendingSendSchedule = nil
+            selectedSendTiming = nil
             withAnimation(LetterCreationMotion.soft) {
                 envelopeVisible = true
                 letterPlacement = .tucked
                 camera = .identity
             }
+            presentSendConfirmation()
         }
 
         @MainActor
@@ -1493,6 +1656,10 @@ extension LetterCreationView {
             try? await Task.sleep(for: .milliseconds(newPhase == .letterType ? 380 : 160))
             guard !Task.isCancelled else { return }
             refreshCamera(animated: true)
+
+            if newPhase == .stamp {
+                presentSendConfirmation()
+            }
         }
 
         @MainActor
@@ -1511,12 +1678,14 @@ extension LetterCreationView {
 
             do {
                 let response: ShipmentCreateResponse
+                let schedule = pendingSendSchedule
                 switch composeKind {
                 case .text:
                     let request = CreateShipmentRequest(
                         origin: origin,
                         destination: destination,
-                        letter: .plain(letterText.trimmingCharacters(in: .whitespacesAndNewlines))
+                        letter: .plain(letterText.trimmingCharacters(in: .whitespacesAndNewlines)),
+                        schedule: schedule
                     )
                     response = try await api.createShipment(request)
                 case .drawing:
@@ -1528,7 +1697,8 @@ extension LetterCreationView {
                     let request = CreateMultipartShipmentRequest(
                         origin: origin,
                         destination: destination,
-                        letter: .pkDrawing(drawingData)
+                        letter: .pkDrawing(drawingData),
+                        schedule: schedule
                     )
                     response = try await api.createShipmentMultipart(request)
                 case nil:
@@ -1538,20 +1708,17 @@ extension LetterCreationView {
                 }
 
                 createdTrackingNumber = response.trackingNumber
+                sentLetterSummary = letterSummary(
+                    for: response,
+                    origin: origin,
+                    destination: destination
+                )
                 deleteDraft()
                 if let service = entitlementsService as? EntitlementsService {
                     service.applyLocalStampSpend(spent: currentStampCost)
                 }
                 await entitlementsService.refresh()
                 phase = .sent
-                withAnimation(LetterCreationMotion.envelope) {
-                    camera = .identity
-                    letterPlacement = .tucked
-                    envelopeVisible = false
-                }
-                try? await Task.sleep(for: .milliseconds(320))
-                guard !Task.isCancelled else { return }
-                showSuccess = true
             } catch {
                 if let apiError = error as? APIError,
                    case let .httpStatus(code, message, _) = apiError,
@@ -1576,11 +1743,39 @@ extension LetterCreationView {
                 }
                 isStampApplied = false
                 phase = .stamp
+                hasConfirmedSendTiming = false
+                pendingSendSchedule = nil
+                selectedSendTiming = nil
                 withAnimation(LetterCreationMotion.soft) {
                     envelopeVisible = true
                     letterPlacement = .tucked
                 }
+                presentSendConfirmation()
             }
+        }
+
+        private func letterSummary(
+            for response: ShipmentCreateResponse,
+            origin: MailboxSummary,
+            destination: MailboxSummary
+        ) -> LetterSummary {
+            LetterSummary(
+                trackingNumber: response.trackingNumber,
+                shipmentID: response.id,
+                origin: LetterEndpoint(mailboxID: origin.id),
+                destination: LetterEndpoint(mailboxID: destination.id),
+                status: response.status,
+                hasLetter: response.letter != nil,
+                letterFormat: response.letter?.format,
+                letterMimeType: response.letter?.mimeType,
+                letterEncoding: response.letter?.encoding,
+                letterByteSize: response.letter?.byteSize,
+                canReadLetter: false,
+                expectedDeliveryTime: response.expectedDeliveryTime,
+                scheduledDeliveryAt: response.scheduledDeliveryAt,
+                createdAt: .now,
+                updatedAt: .now
+            )
         }
 
         static func camera(

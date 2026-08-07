@@ -38,6 +38,11 @@ import Observation
         path.removeLast(path.count)
     }
 
+    /// Replace the entire stack with a single destination (e.g. after send → track).
+    func replaceStack(with route: ViewRoute) {
+        path = [route]
+    }
+
     /// Replace the stack with the destination for an inbound deep link.
     ///
     /// Assigns `path` in one shot. `popToRoot()` + `push()` in the same turn

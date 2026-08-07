@@ -355,7 +355,7 @@ private struct LetterRowView: View {
                     if let arrival = letter.expectedArrivalDisplay {
                         Text("·")
                             .foregroundStyle(.tertiary)
-                        Text(letter.status == .delivered ? "Arrived \(arrival)" : "ETA \(arrival)")
+                        Text(arrivalLabel(for: letter, arrival: arrival))
                             .foregroundStyle(.secondary)
                     } else if letter.status == .failed {
                         Text("·")
@@ -387,6 +387,17 @@ private struct LetterRowView: View {
             Text("Tracking link copied to clipboard.")
         }
         .padding(.vertical, 2)
+    }
+
+    private func arrivalLabel(for letter: LetterSummary, arrival: String) -> String {
+        switch letter.status {
+        case .delivered:
+            return "Arrived \(arrival)"
+        case .held:
+            return "Unlocks \(arrival)"
+        default:
+            return "ETA \(arrival)"
+        }
     }
 }
 

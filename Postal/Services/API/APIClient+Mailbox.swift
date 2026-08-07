@@ -92,4 +92,22 @@ extension APIClient {
     func fetchShipment(id: String) async throws -> Shipment {
         try await get(.shipmentDetail(id: id), authenticated: true)
     }
+
+    /// Natural ETA for a route (`GET /api/shipments/estimate`). Plus / `route_estimate` only.
+    func estimateShipment(
+        originBoxID: MailboxID,
+        destinationBoxID: MailboxID
+    ) async throws -> ShipmentEstimate {
+        try await get(
+            .estimateShipment(
+                originBoxID: originBoxID.rawValue,
+                destinationBoxID: destinationBoxID.rawValue
+            ),
+            authenticated: true
+        )
+    }
+
+    func fetchShipmentEvents(id: String) async throws -> [ShipmentTrackingEvent] {
+        try await get(.shipmentEvents(id: id), authenticated: true)
+    }
 }

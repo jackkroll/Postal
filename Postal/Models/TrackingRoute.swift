@@ -85,6 +85,34 @@ struct TrackingRoute: Codable, Hashable {
         timeline = try container.decodeIfPresent([RouteTimelineEntry].self, forKey: .timeline) ?? []
         events = try container.decodeIfPresent([ShipmentTrackingEvent].self, forKey: .events) ?? []
     }
+
+    init(
+        trackingNumber: String,
+        status: ShipmentStatus,
+        routeFound: Bool,
+        currentFacility: PostOffice?,
+        timeline: [RouteTimelineEntry],
+        events: [ShipmentTrackingEvent]
+    ) {
+        self.trackingNumber = trackingNumber
+        self.status = status
+        self.routeFound = routeFound
+        self.currentFacility = currentFacility
+        self.timeline = timeline
+        self.events = events
+    }
+
+    /// Placeholder used when a public track lookup fails before any route payload exists.
+    static func unavailable(trackingNumber: String) -> TrackingRoute {
+        TrackingRoute(
+            trackingNumber: trackingNumber,
+            status: .failed,
+            routeFound: false,
+            currentFacility: nil,
+            timeline: [],
+            events: []
+        )
+    }
     
     func statusColor() -> Color {
         status.tintColor
@@ -94,7 +122,7 @@ struct TrackingRoute: Codable, Hashable {
         status.iconName
     }
 
-    func statusSummary() -> TrackingStatusSummary {
+    func statusSummary(detail: String? = nil) -> TrackingStatusSummary {
         let title = status.displayTitle
         let facilityName = currentFacility?.name ?? latestEvent?.facility?.name
         let latestDate = latestEventDate
@@ -148,6 +176,19 @@ struct TrackingRoute: Codable, Hashable {
                 ])
             )
 
+        case .held:
+            let heldEvent = events.last { $0.eventType == "held" }
+            let unlockAt = heldEvent?.scheduledFor
+            return TrackingStatusSummary(
+                title: title,
+                message: "Your letter is at the office, waiting to unlock.",
+                context: joinContext([
+                    facilityName.map { "Held at \($0)" },
+                    unlockAt.map { "Unlocks \(formatAbsoluteTime($0))" },
+                    relativeTime.map { "Arrived \($0)" },
+                ])
+            )
+
         case .outForDelivery:
             return TrackingStatusSummary(
                 title: title,
@@ -174,15 +215,16 @@ struct TrackingRoute: Codable, Hashable {
             )
 
         case .failed:
+            let fallbackContext = joinContext([
+                facilityName.map { "Last known location: \($0)" },
+                relativeTime.map { "Last update \($0)" },
+            ])
             return TrackingStatusSummary(
                 title: title,
                 message: routeFound
                     ? "This shipment could not be completed."
                     : "We couldn't find tracking details for this number.",
-                context: joinContext([
-                    facilityName.map { "Last known location: \($0)" },
-                    relativeTime.map { "Last update \($0)" },
-                ])
+                context: detail ?? fallbackContext
             )
         }
     }
@@ -219,7 +261,7 @@ struct TrackingRoute: Codable, Hashable {
     }
 }
 
-struct TrackingStatusSummary {
+struct TrackingStatusSummary: Equatable {
     let title: String
     let message: String
     let context: String?

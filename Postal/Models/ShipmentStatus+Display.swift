@@ -10,6 +10,7 @@ extension ShipmentStatus {
         case .awaitingPickup: "tray.full.fill"
         case .inTransit: "truck.box.fill"
         case .atFacility: "building.fill"
+        case .held: "lock.fill"
         case .outForDelivery: "truck.box.badge.clock.fill"
         case .delivered: "house.fill"
         case .failed: "xmark"
@@ -20,6 +21,7 @@ extension ShipmentStatus {
         switch self {
         case .awaitingPickup: .teal
         case .inTransit, .atFacility: .blue
+        case .held: .indigo
         case .outForDelivery: .mint
         case .delivered: .green
         case .failed: .red

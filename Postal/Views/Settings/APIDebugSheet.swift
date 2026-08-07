@@ -7,6 +7,7 @@ struct APIDebugSheet: View {
     @State private var snapshot = APIDebugSnapshot.empty
     @State private var isRefreshing = false
     @State private var actionMessage: String?
+    @Bindable private var onboarding = AppServices.onboarding
 
     private let api: APIClient
 
@@ -25,6 +26,7 @@ struct APIDebugSheet: View {
                 preferencesSection
                 mailboxesSection
                 deviceTokensSection
+                onboardingSection
                 actionsSection
 
                 if let actionMessage {
@@ -88,6 +90,9 @@ struct APIDebugSheet: View {
                 LabeledContent("text_bytes_per_stamp", value: "\(limits.stampPricing.textBytesPerStamp)")
                 LabeledContent("drawing_bytes_per_stamp", value: "\(limits.stampPricing.drawingBytesPerStamp)")
                 LabeledContent("min_stamps", value: "\(limits.stampPricing.minStamps)")
+                LabeledContent("scheduling.presets", value: limits.scheduling.presets.map(\.rawValue).joined(separator: ", "))
+                LabeledContent("custom_deliver_at", value: limits.scheduling.customDeliverAt ? "true" : "false")
+                LabeledContent("route_estimate", value: limits.scheduling.routeEstimate ? "true" : "false")
             } else if let error = snapshot.limitsError {
                 Text(error)
                     .font(.footnote)
@@ -115,6 +120,9 @@ struct APIDebugSheet: View {
                 LabeledContent("unlimited_sends", value: entitlements.unlimitedSends ? "true" : "false")
                 LabeledContent("mailbox_limit", value: "\(entitlements.mailboxLimit)")
                 LabeledContent("owned_mailboxes", value: "\(entitlements.ownedMailboxes)")
+                LabeledContent("scheduling.presets", value: entitlements.scheduling.presets.map(\.rawValue).joined(separator: ", "))
+                LabeledContent("custom_deliver_at", value: entitlements.scheduling.customDeliverAt ? "true" : "false")
+                LabeledContent("route_estimate", value: entitlements.scheduling.routeEstimate ? "true" : "false")
             } else if let error = snapshot.entitlementsError {
                 Text(error)
                     .font(.footnote)
@@ -258,6 +266,44 @@ struct APIDebugSheet: View {
         }
     }
 
+    private var onboardingSection: some View {
+        Section {
+            debugRow("userID", onboarding.userID)
+            if let progress = onboarding.progress {
+                LabeledContent("status", value: progress.status.rawValue)
+                LabeledContent("step", value: progress.step.rawValue)
+                debugRow("origin", progress.originMailboxLabel ?? progress.originMailboxID?.rawValue)
+                debugRow(
+                    "destination",
+                    progress.savedDestinationNickname
+                        ?? progress.savedDestination?.pickerLabel
+                )
+                debugRow("pending_capsule", progress.pendingTimeCapsuleID?.uuidString)
+            } else {
+                Text("No progress stored")
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                onboarding.resetProgressForDebug()
+                actionMessage = "Onboarding restarted at claimMailbox. Dismiss Settings to see the cover."
+            } label: {
+                Label("Reset Onboarding Progress", systemImage: "arrow.counterclockwise")
+            }
+
+            Button(role: .destructive) {
+                onboarding.clearProgressForDebug()
+                actionMessage = "Onboarding progress cleared. Re-open the app or sign in again to re-bootstrap."
+            } label: {
+                Label("Clear Onboarding Progress", systemImage: "trash")
+            }
+        } header: {
+            Text("Onboarding")
+        } footer: {
+            Text("Reset forces in-progress from claimMailbox (skips claim if you already own a mailbox). Clear removes the record so bootstrap can grandfather or start fresh.")
+        }
+    }
+
     private var actionsSection: some View {
         Section {
             Button {
@@ -345,6 +391,9 @@ struct APIDebugSnapshot: Sendable {
                 "  stamp_pricing.text_bytes_per_stamp: \(limits.stampPricing.textBytesPerStamp)",
                 "  stamp_pricing.drawing_bytes_per_stamp: \(limits.stampPricing.drawingBytesPerStamp)",
                 "  stamp_pricing.min_stamps: \(limits.stampPricing.minStamps)",
+                "  scheduling.presets: \(limits.scheduling.presets.map(\.rawValue).joined(separator: ", "))",
+                "  scheduling.custom_deliver_at: \(limits.scheduling.customDeliverAt)",
+                "  scheduling.route_estimate: \(limits.scheduling.routeEstimate)",
                 "",
             ]
         } else {
@@ -363,6 +412,9 @@ struct APIDebugSnapshot: Sendable {
                 "  unlimited_sends: \(entitlements.unlimitedSends)",
                 "  mailbox_limit: \(entitlements.mailboxLimit)",
                 "  owned_mailboxes: \(entitlements.ownedMailboxes)",
+                "  scheduling.presets: \(entitlements.scheduling.presets.map(\.rawValue).joined(separator: ", "))",
+                "  scheduling.custom_deliver_at: \(entitlements.scheduling.customDeliverAt)",
+                "  scheduling.route_estimate: \(entitlements.scheduling.routeEstimate)",
                 "  allowance.amount: \(entitlements.allowance.amount)",
                 "  allowance.claimable: \(entitlements.allowance.claimable)",
                 "  allowance.next_claim_at: \(entitlements.allowance.nextClaimAt ?? "—")",

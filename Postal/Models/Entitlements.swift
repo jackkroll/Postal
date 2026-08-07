@@ -60,6 +60,7 @@ struct UserEntitlements: Codable, Hashable, Sendable {
     var letter: LetterLimitBlock?
     var allowance: StampAllowanceInfo
     var notification: NotificationEntitlements
+    var scheduling: SchedulingEntitlements
 
     enum CodingKeys: String, CodingKey {
         case isSubscriber = "is_subscriber"
@@ -72,6 +73,7 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         case letter
         case allowance
         case notification
+        case scheduling
     }
 
     init(
@@ -84,7 +86,8 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         ownedMailboxes: Int,
         letter: LetterLimitBlock? = nil,
         allowance: StampAllowanceInfo,
-        notification: NotificationEntitlements
+        notification: NotificationEntitlements,
+        scheduling: SchedulingEntitlements? = nil
     ) {
         self.isSubscriber = isSubscriber
         self.expiresAt = expiresAt
@@ -96,6 +99,8 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         self.letter = letter
         self.allowance = allowance
         self.notification = notification
+        self.scheduling = scheduling
+            ?? (isSubscriber ? .plusDefaults : .freeDefaults)
     }
 
     init(from decoder: Decoder) throws {
@@ -111,6 +116,8 @@ struct UserEntitlements: Codable, Hashable, Sendable {
         letter = try container.decodeIfPresent(LetterLimitBlock.self, forKey: .letter)
         allowance = try container.decode(StampAllowanceInfo.self, forKey: .allowance)
         notification = try container.decode(NotificationEntitlements.self, forKey: .notification)
+        scheduling = try container.decodeIfPresent(SchedulingEntitlements.self, forKey: .scheduling)
+            ?? (isSubscriber ? .plusDefaults : .freeDefaults)
     }
 
     var canClaimAnotherMailbox: Bool {

@@ -2,8 +2,8 @@ import Foundation
 
 enum AppConfiguration {
     #if DEBUG
-    //static let apiBaseURL = URL(string: "http://192.168.1.115:8000")!
-    static let apiBaseURL = URL(string: "http://postal.jackk.dev")!
+    static let apiBaseURL = URL(string: "http://192.168.1.115:8000")!
+    //static let apiBaseURL = URL(string: "http://postal.jackk.dev")!
     #else
     static let apiBaseURL = URL(string: "http://postal.jackk.dev")!
     #endif

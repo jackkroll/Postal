@@ -478,22 +478,3 @@ enum PreviewData {
     )
 }
 
-// MARK: - TrackingRoute memberwise initializer for previews
-
-private extension TrackingRoute {
-    init(
-        trackingNumber: String,
-        status: ShipmentStatus,
-        routeFound: Bool,
-        currentFacility: PostOffice?,
-        timeline: [RouteTimelineEntry],
-        events: [ShipmentTrackingEvent]
-    ) {
-        self.trackingNumber = trackingNumber
-        self.status = status
-        self.routeFound = routeFound
-        self.currentFacility = currentFacility
-        self.timeline = timeline
-        self.events = events
-    }
-}

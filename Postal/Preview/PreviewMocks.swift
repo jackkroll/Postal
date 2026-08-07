@@ -323,3 +323,83 @@ final class PreviewPushNotificationService: PushNotificationsProviding {
 
     func clearAppIconBadge() async {}
 }
+
+// MARK: - Onboarding
+
+extension OnboardingStore {
+    static func preview(
+        step: OnboardingStep = .claimMailbox,
+        status: OnboardingStatus = .inProgress,
+        origin: MailboxSummary? = PreviewData.ownedMailboxes.first,
+        savedDestination: MailboxSummary? = nil,
+        savedDestinationNickname: String? = nil,
+        pendingTimeCapsuleID: UUID? = nil
+    ) -> OnboardingStore {
+        let suiteName = "postal.onboarding.preview.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        let store = OnboardingStore(defaults: defaults)
+        store.load(userID: "preview-user-id")
+
+        var progress = OnboardingProgress.fresh(startingAt: step)
+        progress.status = status
+        if let origin {
+            progress.originMailboxID = origin.id
+            progress.originMailboxLabel = origin.label
+        }
+        progress.savedDestination = savedDestination
+        progress.savedDestinationNickname = savedDestinationNickname
+        progress.pendingTimeCapsuleID = pendingTimeCapsuleID
+        store.replaceProgress(progress)
+        return store
+    }
+}
+
+final class PreviewPendingTimeCapsuleStore: PendingTimeCapsuleStoring {
+    var capsules: [PendingTimeCapsule] = []
+
+    func list() -> [PendingTimeCapsule] { capsules.sorted { $0.createdAt > $1.createdAt } }
+
+    func load(id: UUID) -> PendingTimeCapsule? {
+        capsules.first { $0.id == id }
+    }
+
+    func save(_ capsule: PendingTimeCapsule) {
+        capsules.removeAll { $0.id == capsule.id }
+        capsules.append(capsule)
+    }
+
+    func delete(id: UUID) {
+        capsules.removeAll { $0.id == id }
+    }
+}
+
+extension UserEntitlements {
+    static let previewFreeAllowanceClaimed = UserEntitlements(
+        isSubscriber: false,
+        expiresAt: nil,
+        stampBalance: 5,
+        stampPricing: .default,
+        unlimitedSends: false,
+        mailboxLimit: 1,
+        ownedMailboxes: 1,
+        letter: LetterLimitBlock(
+            textMaxBytes: 4_096,
+            drawingMaxBytes: 20_480,
+            subscriber: LetterSizeCaps(textMaxBytes: 12_288, drawingMaxBytes: 61_440)
+        ),
+        allowance: StampAllowanceInfo(
+            amount: 5,
+            intervalSeconds: 604_800,
+            claimable: false,
+            lastClaimedAt: "2024-07-01T12:00:00Z",
+            nextClaimAt: "2024-07-08T12:00:00Z",
+            availableWhileSubscribed: false
+        ),
+        notification: NotificationEntitlements(
+            allowedSent: [SentNotificationMode.destinationOnly.rawValue],
+            allowedInbound: [InboundNotificationMode.arrivalOnly.rawValue],
+            defaultSent: SentNotificationMode.destinationOnly.rawValue,
+            defaultInbound: InboundNotificationMode.arrivalOnly.rawValue
+        )
+    )
+}

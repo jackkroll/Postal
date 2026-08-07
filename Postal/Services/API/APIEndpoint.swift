@@ -23,6 +23,7 @@ enum APIEndpoint {
     case validateMailbox(mailboxID: String)
     case validatePostOffice(postOfficeID: Int)
     case createShipment
+    case estimateShipment(originBoxID: String, destinationBoxID: String)
     case listShipments(status: ShipmentStatus?, limit: Int?)
     case shipmentDetail(id: String)
     case shipmentEvents(id: String)
@@ -74,6 +75,8 @@ enum APIEndpoint {
             return "/api/post-offices/\(postOfficeID)/validate"
         case .createShipment:
             return "/api/shipments"
+        case .estimateShipment:
+            return "/api/shipments/estimate"
         case .listShipments:
             return "/api/shipments"
         case let .shipmentDetail(id):
@@ -140,6 +143,11 @@ enum APIEndpoint {
         case let .validateMailbox(mailboxID):
             components.queryItems = queryItems([
                 ("mailbox_id", mailboxID),
+            ])
+        case let .estimateShipment(originBoxID, destinationBoxID):
+            components.queryItems = queryItems([
+                ("origin_box_id", originBoxID),
+                ("destination_box_id", destinationBoxID),
             ])
         default:
             break

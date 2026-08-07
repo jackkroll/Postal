@@ -6,44 +6,52 @@ struct TrackingView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            if let route = viewmodel.trackingRoute {
+            if let presentation = viewmodel.statusPresentation {
                 LinearGradient(
-                    colors: [route.statusColor(), route.statusColor().opacity(0.5), .clear],
+                    colors: [presentation.tint, presentation.tint.opacity(0.5), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .frame(maxWidth: .infinity)
                 .frame(height: 250)
                 .ignoresSafeArea(edges: .top)
-                .animation(.easeInOut, value: viewmodel.trackingRoute)
+                .animation(.easeInOut, value: presentation.title)
             }
             Form {
                 if viewmodel.isRecipient, let letterLink = viewmodel.letterReadingLink {
                     viewLetterSection(letterLink, prominent: true)
                 }
 
-                if let route = viewmodel.trackingRoute {
+                if let presentation = viewmodel.statusPresentation {
                     Section {
-                        TrackingStatusHeader(
-                            route: route,
-                            summary: route.statusSummary(),
-                            expectedDeliveryTime: viewmodel.expectedDeliveryTime,
-                            deliveredAt: route.deliveredAt
-                        )
+                        TrackingStatusHeader(presentation: presentation)
                             .listRowSeparator(.hidden)
                             .padding(4)
-                            .listRowBackground(StatusCardBackground(tint: route.statusColor()))
+                            .listRowBackground(StatusCardBackground(tint: presentation.tint))
                     }
                     .listSectionSeparator(.hidden)
                 }
 
-                if viewmodel.trackingRoute == nil {
+                if viewmodel.showsManualTrackAction {
                     Section {
                         Button(viewmodel.isLoading ? "Looking Up…" : "Track") {
                             Task { await viewmodel.lookupTracking() }
                         }
                         .disabled(viewmodel.isLoading || viewmodel.trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+                }
+
+                if viewmodel.showsRetryAction {                        Button(viewmodel.isLoading ? "Looking Up…" : "Try Again") {
+                            Task { await viewmodel.lookupTracking() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .disabled(viewmodel.isLoading)
+                        .frame(maxWidth: .infinity)
+                        
+                        
+                        
                 }
 
                 if let route = viewmodel.trackingRoute,
@@ -96,13 +104,6 @@ struct TrackingView: View {
                 if !viewmodel.isRecipient, let letterLink = viewmodel.letterReadingLink {
                     viewLetterSection(letterLink, prominent: false)
                 }
-
-                if let errorMessage = viewmodel.errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
-                    }
-                }
             }
             .scrollContentBackground(.hidden)
             .refreshable {
@@ -111,7 +112,7 @@ struct TrackingView: View {
                 await lookup
             }
             .navigationTitle(viewmodel.currentStatus() ?? "")
-            .animation(.easeInOut,value: viewmodel.currentStatus())
+            .animation(.easeInOut, value: viewmodel.currentStatus())
             .navigationDestination(item: $viewmodel.presentedRouteMap) { route in
                 TrackingRouteMapDetailView(
                     route: route,
@@ -179,58 +180,121 @@ struct TrackingView: View {
     }
 }
 
-private struct TrackingStatusHeader: View {
-    let route: TrackingRoute
+struct TrackingStatusPresentation: Equatable {
+    let tint: Color
+    let icon: String
+    let title: String
     let summary: TrackingStatusSummary
     let expectedDeliveryTime: Date?
     let deliveredAt: Date?
+    let arrivalVerb: String
+    let showsProgress: Bool
 
-    var body: some View {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: route.statusIcon())
-                        .font(.title2)
-                        .foregroundStyle(route.statusColor())
-                        .frame(width: 48, height: 48)
-                        .background(route.statusColor().opacity(0.18))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    Spacer()
-                    if let expectedDeliveryTime = expectedDeliveryTime {
-                        HStack {
-                            Text("\(route.status == .delivered ? "Arrived": "Expected") \(expectedDeliveryTime.formatted(date: .long, time: .omitted))")
-                        }
-                        .foregroundStyle(.secondary)
-                        .bold()
-                    }
-                }
-                
-                Text(summary.message)
-                    .font(.title3)
-                    .bold()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                
-                if let context = summary.context {
-                    Text(context)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    static func loaded(
+        route: TrackingRoute,
+        expectedDeliveryTime: Date?,
+        detail: String? = nil
+    ) -> TrackingStatusPresentation {
+        TrackingStatusPresentation(
+            tint: route.statusColor(),
+            icon: route.statusIcon(),
+            title: route.status.displayTitle,
+            summary: route.statusSummary(detail: detail),
+            expectedDeliveryTime: expectedDeliveryTime,
+            deliveredAt: route.deliveredAt,
+            arrivalVerb: arrivalVerb(for: route.status),
+            showsProgress: false
+        )
     }
 
-    private var arrivalLine: String? {
-        if route.status == .delivered, let deliveredAt {
-            return "Arrived \(deliveredAt.formatted(date: .abbreviated, time: .omitted))"
+    static func loading() -> TrackingStatusPresentation {
+        TrackingStatusPresentation(
+            tint: .blue,
+            icon: "magnifyingglass",
+            title: "Looking Up",
+            summary: TrackingStatusSummary(
+                title: "Looking Up",
+                message: "Looking up your letter…",
+                context: "This usually only takes a moment."
+            ),
+            expectedDeliveryTime: nil,
+            deliveredAt: nil,
+            arrivalVerb: "Expected",
+            showsProgress: true
+        )
+    }
+
+    static func unavailable(detail: String?) -> TrackingStatusPresentation {
+        let isNotFound = detail?.localizedCaseInsensitiveContains("not found") == true
+        return TrackingStatusPresentation(
+            tint: ShipmentStatus.failed.tintColor,
+            icon: ShipmentStatus.failed.iconName,
+            title: "Not Found",
+            summary: TrackingStatusSummary(
+                title: ShipmentStatus.failed.displayTitle,
+                message: isNotFound
+                    ? "We couldn't find tracking details for this number."
+                    : "We couldn't load tracking details.",
+                context: detail
+            ),
+            expectedDeliveryTime: nil,
+            deliveredAt: nil,
+            arrivalVerb: "Expected",
+            showsProgress: false
+        )
+    }
+
+    private static func arrivalVerb(for status: ShipmentStatus) -> String {
+        switch status {
+        case .delivered: "Arrived"
+        case .held: "Unlocks"
+        default: "Expected"
         }
-        if let expectedDeliveryTime {
-            let label = route.status == .delivered ? "Arrived" : "Expected"
-            return "\(label) \(expectedDeliveryTime.formatted(date: .abbreviated, time: .omitted))"
+    }
+}
+
+private struct TrackingStatusHeader: View {
+    let presentation: TrackingStatusPresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Group {
+                    if presentation.showsProgress {
+                        ProgressView()
+                            .tint(presentation.tint)
+                    } else {
+                        Image(systemName: presentation.icon)
+                            .font(.title2)
+                            .foregroundStyle(presentation.tint)
+                    }
+                }
+                .frame(width: 48, height: 48)
+                .background(presentation.tint.opacity(0.18))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Spacer()
+                if let expectedDeliveryTime = presentation.expectedDeliveryTime {
+                    HStack {
+                        Text("\(presentation.arrivalVerb) \(expectedDeliveryTime.formatted(date: .long, time: .omitted))")
+                    }
+                    .foregroundStyle(.secondary)
+                    .bold()
+                }
+            }
+
+            Text(presentation.summary.message)
+                .font(.title3)
+                .bold()
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let context = presentation.summary.context {
+                Text(context)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        if route.status == .failed || !route.routeFound {
-            return "ETA unavailable"
-        }
-        return nil
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -289,6 +353,44 @@ extension TrackingView {
             trackingInfo?.expectedDeliveryTime ?? letterSummary?.expectedDeliveryTime
         }
 
+        var statusPresentation: TrackingStatusPresentation? {
+            if let route = trackingRoute {
+                let detail = route.status == .failed ? friendlyErrorDetail : nil
+                return .loaded(
+                    route: route,
+                    expectedDeliveryTime: expectedDeliveryTime,
+                    detail: detail
+                )
+            }
+            if errorMessage != nil {
+                return .unavailable(detail: friendlyErrorDetail)
+            }
+            if isLoading, !trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .loading()
+            }
+            return nil
+        }
+
+        var showsManualTrackAction: Bool {
+            trackingRoute == nil
+                && errorMessage == nil
+                && !isLoading
+                && !trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        var showsRetryAction: Bool {
+            trackingRoute == nil && errorMessage != nil
+        }
+
+        /// Prefer a short human detail over raw `Request failed (404): …` copy.
+        private var friendlyErrorDetail: String? {
+            guard let errorMessage, !errorMessage.isEmpty else { return nil }
+            if let apiError = errorMessage.apiFailureDetail {
+                return apiError
+            }
+            return errorMessage
+        }
+
         init(
             apiClient: APIClient,
             letterService: LetterContentProviding = LetterContentService(),
@@ -321,9 +423,6 @@ extension TrackingView {
 
             isLoading = true
             errorMessage = nil
-            trackingInfo = nil
-            trackingRoute = nil
-            locationsByCode = [:]
             defer { isLoading = false }
 
             do {
@@ -340,6 +439,10 @@ extension TrackingView {
                 Task { await resolveMapLocations(for: route, trackingInfo: summary) }
             } catch {
                 errorMessage = error.localizedDescription
+                // Drop stale payload so the unavailable status card can take over.
+                trackingInfo = nil
+                trackingRoute = nil
+                locationsByCode = [:]
             }
         }
 
@@ -369,11 +472,21 @@ extension TrackingView {
         func lookupLocation(code: Int) async throws -> Location {
             try await api.fetchLocation(code: code)
         }
-        
+
         func currentStatus() -> String? {
-            trackingRoute?.status.displayTitle ?? trackingInfo?.status.displayTitle
+            statusPresentation?.title
+                ?? trackingRoute?.status.displayTitle
+                ?? trackingInfo?.status.displayTitle
         }
-        
+    }
+}
+
+private extension String {
+    /// Pulls the server message out of `Request failed (404): Shipment not found.` style errors.
+    var apiFailureDetail: String? {
+        guard let markerRange = range(of: "): ") else { return nil }
+        let detail = String(self[markerRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return detail.isEmpty ? nil : detail
     }
 }
 

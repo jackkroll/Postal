@@ -35,7 +35,7 @@ struct PostalLoadFailure: Equatable {
             case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed,
                  .badServerResponse:
                 kind = .serverUnreachable
-                message = "Couldn't reach the Postal server. The server may be down — try again in a few minutes."
+                message = "Couldn't reach the Postal server. The server may be down. Try again soon."
                 return
             case .cancelled:
                 kind = .other

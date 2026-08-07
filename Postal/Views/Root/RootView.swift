@@ -4,6 +4,7 @@ import RevenueCat
 struct RootView: View {
     @State private var router = Router()
     @State private var authState = AuthStateObserver()
+    @Bindable private var onboarding = AppServices.onboarding
 
     var body: some View {
         NavigationStack(path: $router.path) {
@@ -21,6 +22,9 @@ struct RootView: View {
             }
         }
         .environment(router)
+        .fullScreenCover(isPresented: onboardingCoverBinding) {
+            OnboardingFlowView(store: onboarding)
+        }
         .onOpenURL(perform: handleIncomingURL)
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             guard let url = activity.webpageURL else { return }
@@ -29,17 +33,47 @@ struct RootView: View {
         .task(id: authState.userID) {
             if let userID = authState.userID {
                 MapKitWarmup.prepareIfNeeded()
+                onboarding.load(userID: userID)
                 await Self.handleSignedIn(userID: userID)
+                await Self.bootstrapOnboarding(onboarding)
             } else {
+                onboarding.clear()
                 await Self.handleSignedOut()
             }
         }
+    }
+
+    /// Presents onboarding only after progress is loaded and still incomplete.
+    private var onboardingCoverBinding: Binding<Bool> {
+        Binding(
+            get: { authState.isSignedIn && onboarding.shouldPresent },
+            set: { _ in }
+        )
     }
 
     /// Opens `https://postal.jackk.dev/track/{number}` (and `postal://track/{number}`).
     private func handleIncomingURL(_ url: URL) {
         guard let deepLink = DeepLink.parse(url) else { return }
         router.open(deepLink)
+    }
+
+    /// Decide whether this account needs onboarding (new) or is grandfathered (existing).
+    private static func bootstrapOnboarding(_ onboarding: OnboardingStore) async {
+        do {
+            let mailboxes = try await AppServices.api.listOwnedMailboxes()
+            await MainActor.run {
+                onboarding.bootstrapIfNeeded(ownedMailboxCount: mailboxes.count)
+                onboarding.skipClaimIfNeeded(ownedMailboxes: mailboxes)
+            }
+        } catch {
+            guard !error.isPostalCancellation else { return }
+            // Offline first launch with no mailbox history: still offer onboarding.
+            await MainActor.run {
+                if onboarding.progress == nil {
+                    onboarding.bootstrapIfNeeded(ownedMailboxCount: 0)
+                }
+            }
+        }
     }
 
     /// Link Firebase uid to RevenueCat, refresh entitlements, and re-register push.

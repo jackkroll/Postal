@@ -8,6 +8,7 @@ enum PaywallSource: String, Sendable {
     case sendAlert = "send_alert"
     case mailboxLimit = "mailbox_limit"
     case notifications
+    case onboarding
 }
 
 /// Lightweight monetization event logging (OSLog). Ready to forward to a backend later.

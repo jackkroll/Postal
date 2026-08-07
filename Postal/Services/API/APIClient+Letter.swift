@@ -176,6 +176,15 @@ extension APIClient {
         appendField("origin_box_id", request.originBoxID.rawValue)
         appendField("destination_box_id", request.destinationBoxID.rawValue)
 
+        switch request.schedule {
+        case let .preset(preset):
+            appendField("schedule_preset", preset.rawValue)
+        case let .deliverAt(date):
+            appendField("deliver_at", date.apiTimestampString)
+        case nil:
+            break
+        }
+
         if let letter = request.letter {
             appendField("letter_format", letter.format.rawValue)
             appendField("letter_mime_type", letter.mimeType)

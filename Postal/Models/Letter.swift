@@ -56,21 +56,57 @@ struct CreateTextLetterPayload: Codable, Hashable {
     }
 }
 
-struct CreateShipmentRequest: Codable {
+struct CreateShipmentRequest: Encodable {
     let originBoxID: MailboxID
     let destinationBoxID: MailboxID
     let letter: CreateTextLetterPayload?
+    let schedule: ShipmentSchedule?
 
     enum CodingKeys: String, CodingKey {
         case originBoxID = "origin_box_id"
         case destinationBoxID = "destination_box_id"
         case letter
+        case schedulePreset = "schedule_preset"
+        case deliverAt = "deliver_at"
     }
 
-    init(origin: MailboxSummary, destination: MailboxSummary, letter: CreateTextLetterPayload?) {
+    init(
+        origin: MailboxSummary,
+        destination: MailboxSummary,
+        letter: CreateTextLetterPayload?,
+        schedule: ShipmentSchedule? = nil
+    ) {
         self.originBoxID = origin.id
         self.destinationBoxID = destination.id
         self.letter = letter
+        self.schedule = schedule
+    }
+
+    init(
+        originBoxID: MailboxID,
+        destinationBoxID: MailboxID,
+        letter: CreateTextLetterPayload?,
+        schedule: ShipmentSchedule? = nil
+    ) {
+        self.originBoxID = originBoxID
+        self.destinationBoxID = destinationBoxID
+        self.letter = letter
+        self.schedule = schedule
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(originBoxID, forKey: .originBoxID)
+        try container.encode(destinationBoxID, forKey: .destinationBoxID)
+        try container.encodeIfPresent(letter, forKey: .letter)
+        switch schedule {
+        case let .preset(preset):
+            try container.encode(preset, forKey: .schedulePreset)
+        case let .deliverAt(date):
+            try container.encode(date.apiTimestampString, forKey: .deliverAt)
+        case nil:
+            break
+        }
     }
 }
 
@@ -104,11 +140,30 @@ struct CreateMultipartShipmentRequest {
     let originBoxID: MailboxID
     let destinationBoxID: MailboxID
     let letter: CreateMultipartLetterPayload?
+    let schedule: ShipmentSchedule?
 
-    init(origin: MailboxSummary, destination: MailboxSummary, letter: CreateMultipartLetterPayload?) {
+    init(
+        origin: MailboxSummary,
+        destination: MailboxSummary,
+        letter: CreateMultipartLetterPayload?,
+        schedule: ShipmentSchedule? = nil
+    ) {
         self.originBoxID = origin.id
         self.destinationBoxID = destination.id
         self.letter = letter
+        self.schedule = schedule
+    }
+
+    init(
+        originBoxID: MailboxID,
+        destinationBoxID: MailboxID,
+        letter: CreateMultipartLetterPayload?,
+        schedule: ShipmentSchedule? = nil
+    ) {
+        self.originBoxID = originBoxID
+        self.destinationBoxID = destinationBoxID
+        self.letter = letter
+        self.schedule = schedule
     }
 }
 
@@ -118,6 +173,8 @@ struct ShipmentCreateResponse: Codable, Identifiable, Hashable {
     let status: ShipmentStatus
     let originBoxID: MailboxID
     let destinationBoxID: MailboxID
+    let expectedDeliveryTime: Date?
+    let scheduledDeliveryAt: Date?
     let letter: LetterMetadata?
 
     enum CodingKeys: String, CodingKey {
@@ -126,6 +183,8 @@ struct ShipmentCreateResponse: Codable, Identifiable, Hashable {
         case status
         case originBoxID = "origin_box_id"
         case destinationBoxID = "destination_box_id"
+        case expectedDeliveryTime = "expected_delivery_time"
+        case scheduledDeliveryAt = "scheduled_delivery_at"
         case letter
     }
 }

@@ -14,6 +14,7 @@ struct LetterLimits: Equatable, Sendable {
     /// Plus ceilings for Free-plan upsell; nil when already subscribed.
     var subscriberTextMaxBytes: Int?
     var subscriberDrawingMaxBytes: Int?
+    var scheduling: SchedulingEntitlements
 
     init(
         isSubscriber: Bool,
@@ -24,7 +25,8 @@ struct LetterLimits: Equatable, Sendable {
         maxTextBytes: Int,
         maxDrawingBytes: Int,
         subscriberTextMaxBytes: Int? = nil,
-        subscriberDrawingMaxBytes: Int? = nil
+        subscriberDrawingMaxBytes: Int? = nil,
+        scheduling: SchedulingEntitlements? = nil
     ) {
         self.isSubscriber = isSubscriber
         self.unlimitedSends = unlimitedSends
@@ -35,6 +37,8 @@ struct LetterLimits: Equatable, Sendable {
         self.maxDrawingBytes = maxDrawingBytes
         self.subscriberTextMaxBytes = subscriberTextMaxBytes
         self.subscriberDrawingMaxBytes = subscriberDrawingMaxBytes
+        self.scheduling = scheduling
+            ?? (isSubscriber ? .plusDefaults : .freeDefaults)
     }
 
     var planLabel: String {
@@ -139,6 +143,7 @@ extension LetterLimits: Decodable {
         case ownedMailboxes = "owned_mailboxes"
         case stampPricing = "stamp_pricing"
         case letter
+        case scheduling
     }
 
     init(from decoder: Decoder) throws {
@@ -154,7 +159,8 @@ extension LetterLimits: Decodable {
             maxTextBytes: letter.textMaxBytes,
             maxDrawingBytes: letter.drawingMaxBytes,
             subscriberTextMaxBytes: letter.subscriber?.textMaxBytes,
-            subscriberDrawingMaxBytes: letter.subscriber?.drawingMaxBytes
+            subscriberDrawingMaxBytes: letter.subscriber?.drawingMaxBytes,
+            scheduling: try root.decodeIfPresent(SchedulingEntitlements.self, forKey: .scheduling)
         )
     }
 }

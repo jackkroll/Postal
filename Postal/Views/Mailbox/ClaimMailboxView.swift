@@ -5,13 +5,19 @@ struct ClaimMailboxView: View {
     @State private var viewmodel: ViewModel
     @State private var isPaywallPresented = false
     private let loadsOnAppear: Bool
+    /// When set, success skips the alert and calls this instead of dismissing.
+    private let onClaimed: ((MailboxSummary) -> Void)?
 
     init(
         viewmodel: ViewModel = ViewModel(api: AppServices.api),
-        loadsOnAppear: Bool = true
+        loadsOnAppear: Bool = true,
+        footerOverride: String? = nil,
+        onClaimed: ((MailboxSummary) -> Void)? = nil
     ) {
+        viewmodel.footerOverride = footerOverride
         _viewmodel = State(initialValue: viewmodel)
         self.loadsOnAppear = loadsOnAppear
+        self.onClaimed = onClaimed
     }
 
     var body: some View {
@@ -46,14 +52,23 @@ struct ClaimMailboxView: View {
                     .background(.ultraThinMaterial)
             }
         }
-        .alert("Mailbox Claimed", isPresented: $viewmodel.showSuccess) {
-            Button("Done") {
-                dismiss()
-            }
+        .alert(
+            "Mailbox Claimed",
+            isPresented: Binding(
+                get: { onClaimed == nil && viewmodel.showSuccess },
+                set: { viewmodel.showSuccess = $0 }
+            )
+        ) {
+            Button("Done") { dismiss() }
         } message: {
             if let mailbox = viewmodel.claimedMailbox {
                 Text("\(mailbox.label)\n\(mailbox.locationLabel)")
             }
+        }
+        .onChange(of: viewmodel.showSuccess) { _, success in
+            guard success, let onClaimed, let mailbox = viewmodel.claimedMailbox else { return }
+            viewmodel.showSuccess = false
+            onClaimed(mailbox)
         }
         .task {
             guard loadsOnAppear else { return }
@@ -219,6 +234,7 @@ extension ClaimMailboxView {
         }
 
         var claimFooterText: String {
+            if let footerOverride { return footerOverride }
             if let entitlements {
                 return PromoText.claimMailboxFooter(
                     owned: entitlements.ownedMailboxes,
@@ -227,6 +243,9 @@ extension ClaimMailboxView {
             }
             return PromoText.claimMailboxFooterFallback
         }
+
+        /// Optional footer supplied by embedded hosts (e.g. onboarding).
+        var footerOverride: String?
 
         var canClaim: Bool {
             guard !isAtMailboxLimit else { return false }

@@ -4,6 +4,8 @@ enum ShipmentStatus: String, Codable, Hashable {
     case awaitingPickup = "awaiting_pickup"
     case inTransit = "in_transit"
     case atFacility = "at_facility"
+    /// Arrived at destination office but held until `scheduled_delivery_at`.
+    case held = "held"
     case outForDelivery = "out_for_delivery"
     case delivered = "delivered"
     case failed = "failed"
@@ -19,7 +21,10 @@ struct Shipment: Decodable, Identifiable, Hashable {
     let destinationPostOffice: PostOffice?
     let status: ShipmentStatus
     let currentFacility: PostOffice?
+    /// When the letter becomes officially delivered (after any hold).
     let expectedDeliveryTime: Date?
+    /// User-requested hold end; `nil` when not scheduled.
+    let scheduledDeliveryAt: Date?
     let routeFound: Bool
     let letter: LetterMetadata?
     let canReadLetter: Bool
@@ -38,6 +43,7 @@ struct Shipment: Decodable, Identifiable, Hashable {
         case status
         case currentFacility = "current_facility"
         case expectedDeliveryTime = "expected_delivery_time"
+        case scheduledDeliveryAt = "scheduled_delivery_at"
         case routeFound = "route_found"
         case letter
         case canReadLetter = "can_read_letter"
@@ -58,6 +64,7 @@ struct Shipment: Decodable, Identifiable, Hashable {
         status = try container.decode(ShipmentStatus.self, forKey: .status)
         currentFacility = try container.decodeIfPresent(PostOffice.self, forKey: .currentFacility)
         expectedDeliveryTime = try container.decodeIfPresent(Date.self, forKey: .expectedDeliveryTime)
+        scheduledDeliveryAt = try container.decodeIfPresent(Date.self, forKey: .scheduledDeliveryAt)
         routeFound = try container.decodeIfPresent(Bool.self, forKey: .routeFound) ?? false
         letter = try container.decodeIfPresent(LetterMetadata.self, forKey: .letter)
         canReadLetter = try container.decodeIfPresent(Bool.self, forKey: .canReadLetter) ?? false
