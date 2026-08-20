@@ -15,6 +15,7 @@ struct LettersListView: View {
         }
     }
 
+    @Environment(Router.self) private var router
     @AppStorage(AppStorageKeys.showInboundLetters) private var showInboundLetters = true
     @State private var selectedTab: LettersTab = .sent
     @State private var viewmodel: ViewModel
@@ -39,12 +40,16 @@ struct LettersListView: View {
         .navigationTitle("My Letters")
         .toolbar {
             ToolbarItem(placement: .bottomBar) {
-                NavigationLink(value: ViewRoute.settings) {
+                Button {
+                    router.push(.settings)
+                } label: {
                     Label("Settings", systemImage: "gearshape")
                 }
             }
             ToolbarItem(placement: .bottomBar) {
-                NavigationLink(value: ViewRoute.addressbook) {
+                Button {
+                    router.push(.addressbook)
+                } label: {
                     Label("Address Book", systemImage: "book")
                 }
             }
@@ -52,7 +57,9 @@ struct LettersListView: View {
                 ToolbarSpacer(.flexible, placement: .bottomBar)
             }
             ToolbarItem(placement: .bottomBar) {
-                NavigationLink(value: ViewRoute.ship()) {
+                Button {
+                    router.push(.ship())
+                } label: {
                     Label("Ship", systemImage: "square.and.pencil")
                 }
             }
@@ -248,10 +255,12 @@ struct LettersListView: View {
         } description: {
             Text(failure.message)
         } actions: {
+            NavigationLink("Write a Draft", value: ViewRoute.ship())
+                .buttonStyle(.borderedProminent)
             Button("Try Again") {
                 Task { await viewmodel.loadSentLetters() }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
         }
     }
 

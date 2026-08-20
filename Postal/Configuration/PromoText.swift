@@ -165,8 +165,9 @@ enum PromoText {
 
     static let onboardingDestinationTitle = "Anyone to write to?"
     static let onboardingDestinationBody =
-        "If you already know a mailbox from a friend, partner, or somewhere you’d like to send a letter feel free to add it now. You can always add people later."
-    static let onboardingDestinationYes = "Yes, I have a destination"
+        "If you already know a mailbox from a friend, partner, or somewhere you’d like to send a letter feel free to add it now. Scan their invite QR, open a shared link, or look them up. You can always add people later."
+    static let onboardingDestinationYes = "Yes, look up a mailbox"
+    static let onboardingDestinationScan = "Scan invite QR"
     static let onboardingDestinationNo = "Not yet"
 
     static let onboardingLetterTitle = "Write a time capsule"

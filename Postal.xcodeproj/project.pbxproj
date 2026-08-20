@@ -12,6 +12,7 @@
 		5637938E3016BDB700B90A9C /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5637938D3016BDB700B90A9C /* StoreKit.framework */; };
 		56D3D81930096ED900682844 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 56D3D81830096ED900682844 /* FirebaseAuth */; };
 		56D3D81B30096ED900682844 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 56D3D81A30096ED900682844 /* FirebaseCore */; };
+		56E8F1A2302A100100C0DE03 /* CodeScanner in Frameworks */ = {isa = PBXBuildFile; productRef = 56E8F1A1302A100100C0DE02 /* CodeScanner */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 				5637938E3016BDB700B90A9C /* StoreKit.framework in Frameworks */,
 				56D3D81930096ED900682844 /* FirebaseAuth in Frameworks */,
 				563792B930129B9F00B90A9C /* RevenueCat in Frameworks */,
+				56E8F1A2302A100100C0DE03 /* CodeScanner in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -92,6 +94,7 @@
 				56D3D81A30096ED900682844 /* FirebaseCore */,
 				563792B830129B9F00B90A9C /* RevenueCat */,
 				563792BA30129B9F00B90A9C /* RevenueCatUI */,
+				56E8F1A1302A100100C0DE02 /* CodeScanner */,
 			);
 			productName = Postal;
 			productReference = 56DB1E9B2FF44C2B00D330D8 /* Postal.app */;
@@ -124,6 +127,7 @@
 			packageReferences = (
 				56D3D81730096ED900682844 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				563792B730129B9F00B90A9C /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
+				56E8F1A0302A100100C0DE01 /* XCRemoteSwiftPackageReference "CodeScanner" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 56DB1E9C2FF44C2B00D330D8 /* Products */;
@@ -387,6 +391,14 @@
 				minimumVersion = 12.16.0;
 			};
 		};
+		56E8F1A0302A100100C0DE01 /* XCRemoteSwiftPackageReference "CodeScanner" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/twostraws/CodeScanner";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -409,6 +421,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 56D3D81730096ED900682844 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
+		};
+		56E8F1A1302A100100C0DE02 /* CodeScanner */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 56E8F1A0302A100100C0DE01 /* XCRemoteSwiftPackageReference "CodeScanner" */;
+			productName = CodeScanner;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

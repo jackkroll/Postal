@@ -103,10 +103,12 @@ struct LetterCreationView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard loadsOnAppear else { return }
-            await viewmodel.loadMailboxes()
-            await viewmodel.refreshEntitlements()
-            await viewmodel.refreshLimits()
-            await viewmodel.beginGuidedFlow()
+            // Start composing immediately so offline devices can draft without waiting on the API.
+            async let flow: Void = viewmodel.beginGuidedFlow()
+            async let mailboxes: Void = viewmodel.loadMailboxes()
+            async let entitlements: Void = viewmodel.refreshEntitlements()
+            async let limits: Void = viewmodel.refreshLimits()
+            _ = await (flow, mailboxes, entitlements, limits)
         }
         .onChange(of: viewmodel.phase) { _, _ in
             viewmodel.refreshCamera(animated: true)
@@ -134,7 +136,11 @@ struct LetterCreationView: View {
                 mailboxes: viewmodel.ownedMailboxes,
                 selectedID: viewmodel.selectedOriginMailboxID,
                 isLoading: viewmodel.isLoadingMailboxes,
+                loadErrorMessage: viewmodel.loadErrorMessage,
                 onSelect: { viewmodel.selectOrigin($0) },
+                onRetry: {
+                    Task { await viewmodel.loadMailboxes() }
+                },
                 onClaimMailbox: {
                     pendingClaimBoxNavigation = true
                     viewmodel.isOriginPickerPresented = false
@@ -185,8 +191,8 @@ struct LetterCreationView: View {
             Text(viewmodel.sendErrorMessage ?? "")
         }
         .alert("Couldn't Load Mailboxes", isPresented: Binding(
-            get: { viewmodel.loadErrorMessage != nil },
-            set: { if !$0 { viewmodel.loadErrorMessage = nil } }
+            get: { viewmodel.shouldPresentMailboxLoadAlert },
+            set: { if !$0 { viewmodel.dismissMailboxLoadAlert() } }
         )) {
             Button("OK", role: .cancel) {}
             Button("Retry") {
@@ -607,11 +613,22 @@ private struct LetterCreationChrome: View {
                 .frame(maxWidth: .infinity)
         case .returnAddress:
             if viewmodel.ownedMailboxes.isEmpty && !viewmodel.isLoadingMailboxes {
-                NavigationLink(value: ViewRoute.claimBox) {
-                    Text("Claim a Mailbox")
+                VStack(spacing: 10) {
+                    if viewmodel.loadErrorMessage != nil {
+                        Button("Retry") {
+                            Task { await viewmodel.loadMailboxes() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        NavigationLink(value: ViewRoute.claimBox) {
+                            Text("Claim a Mailbox")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity)
+                    }
+                    stepNavigationRow(showContinue: false)
                 }
-                .buttonStyle(.borderedProminent)
-                .frame(maxWidth: .infinity)
             } else {
                 stepNavigationRow(showContinue: true)
             }
@@ -642,8 +659,11 @@ private struct LetterCreationChrome: View {
                 Button {
                     viewmodel.enqueueForward()
                 } label: {
-                    Label("Continue", systemImage: "chevron.forward")
-                        .labelStyle(SwappedLabelStyle())
+                    Label(
+                        viewmodel.continueTitle,
+                        systemImage: "chevron.forward"
+                    )
+                    .labelStyle(SwappedLabelStyle())
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!viewmodel.canAdvance)
@@ -659,7 +679,9 @@ private struct OriginMailboxPickerSheet: View {
     let mailboxes: [MailboxSummary]
     let selectedID: MailboxID?
     let isLoading: Bool
+    var loadErrorMessage: String? = nil
     let onSelect: (MailboxSummary) -> Void
+    var onRetry: (() -> Void)? = nil
     let onClaimMailbox: () -> Void
 
     var body: some View {
@@ -670,15 +692,33 @@ private struct OriginMailboxPickerSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if mailboxes.isEmpty {
                     ContentUnavailableView {
-                        Label("No Mailboxes", systemImage: "tray")
+                        Label(
+                            loadErrorMessage == nil ? "No Mailboxes" : "Couldn't Load Mailboxes",
+                            systemImage: loadErrorMessage == nil ? "tray" : "wifi.slash"
+                        )
                     } description: {
-                        Text("Claim a mailbox before sending letters.")
+                        Text(
+                            loadErrorMessage
+                                ?? "Claim a mailbox before sending letters."
+                        )
                     } actions: {
-                        Button("Claim a Mailbox") {
-                            onClaimMailbox()
-                            dismiss()
+                        if let onRetry, loadErrorMessage != nil {
+                            Button("Try Again", action: onRetry)
+                                .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.borderedProminent)
+                        if loadErrorMessage == nil {
+                            Button("Claim a Mailbox") {
+                                onClaimMailbox()
+                                dismiss()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("Claim a Mailbox") {
+                                onClaimMailbox()
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
                 } else {
                     List(mailboxes) { mailbox in
@@ -744,6 +784,8 @@ extension LetterCreationView {
         var isOriginPickerPresented = false
         var isLoadingMailboxes = false
         var loadErrorMessage: String?
+        /// Blocking mailbox-load alert only when the user is on the return-address step.
+        var shouldPresentMailboxLoadAlert = false
 
         var letterText = ""
         /// Cached metrics so chrome doesn't re-scan UTF-8 / trim on every read path unnecessarily.
@@ -1113,7 +1155,7 @@ extension LetterCreationView {
             case .returnAddress:
                 return selectedOriginMailbox != nil
             case .letterType, .compose:
-                return canSend
+                return hasComposedContent && !isOverContentLimit
             default:
                 return false
             }
@@ -1121,10 +1163,24 @@ extension LetterCreationView {
 
         var canGoBack: Bool {
             switch phase {
-            case .returnAddress, .letterType, .compose, .stamp:
+            case .destination:
+                return hasComposedContent || composeKind != nil
+            case .returnAddress, .stamp:
                 return true
+            case .letterType, .compose:
+                return selectedDestinationMailbox != nil || selectedOriginMailbox != nil
             default:
                 return false
+            }
+        }
+
+        var continueTitle: String {
+            switch phase {
+            case .letterType, 
+                    .compose where !canSend:
+                return "Add Addresses"
+            default:
+                return "Continue"
             }
         }
 
@@ -1161,11 +1217,17 @@ extension LetterCreationView {
             case .letterType, .compose:
                 switch composeKind {
                 case .text where !letterIsBlank:
-                    return "Tap Edit to keep writing, or continue."
+                    return selectedDestinationMailbox == nil
+                        ? "Saved as a draft. Add addresses when you're ready."
+                        : "Tap Edit to keep writing, or continue."
                 case .drawing where hasComposedContent:
-                    return "Tap Edit to keep drawing, or continue."
+                    return selectedDestinationMailbox == nil
+                        ? "Saved as a draft. Add addresses when you're ready."
+                        : "Tap Edit to keep drawing, or continue."
                 default:
-                    return "Write your letter or draw it."
+                    return selectedDestinationMailbox == nil && selectedOriginMailbox == nil
+                        ? "Write or draw now. You can pick mailboxes later."
+                        : "Write your letter or draw it."
                 }
             case .stamp:
                 if needsStampsBeforeSend {
@@ -1219,6 +1281,10 @@ extension LetterCreationView {
             }
         }
 
+        func dismissMailboxLoadAlert() {
+            shouldPresentMailboxLoadAlert = false
+        }
+
         func loadMailboxes() async {
             isLoadingMailboxes = true
             loadErrorMessage = nil
@@ -1226,6 +1292,8 @@ extension LetterCreationView {
 
             do {
                 ownedMailboxes = try await api.listOwnedMailboxes()
+                loadErrorMessage = nil
+                shouldPresentMailboxLoadAlert = false
                 if selectedOriginMailboxID == nil, ownedMailboxes.count == 1 {
                     selectedOriginMailboxID = ownedMailboxes[0].id
                 } else if let selectedOriginMailboxID,
@@ -1234,6 +1302,8 @@ extension LetterCreationView {
                 }
             } catch {
                 loadErrorMessage = error.postalLoadFailure.message
+                // Don't interrupt drafting; only alert if the user is choosing a return address.
+                shouldPresentMailboxLoadAlert = phase == .returnAddress
             }
         }
 
@@ -1300,7 +1370,8 @@ extension LetterCreationView {
             } else if selectedDestinationMailbox != nil {
                 nextPhase = .returnAddress
             } else {
-                nextPhase = .destination
+                // Compose first so drafts work with no network and no mailboxes yet.
+                nextPhase = .letterType
             }
             await transition(to: nextPhase, zoomOutFirst: false)
         }
@@ -1345,13 +1416,27 @@ extension LetterCreationView {
             switch phase {
             case .destination:
                 guard selectedDestinationMailbox != nil else { return }
-                await transition(to: .returnAddress, zoomOutFirst: true)
+                if selectedOriginMailbox != nil {
+                    await transition(to: .letterType, zoomOutFirst: true)
+                } else {
+                    await transition(to: .returnAddress, zoomOutFirst: true)
+                }
             case .returnAddress:
                 guard selectedOriginMailbox != nil else { return }
-                await transition(to: .letterType, zoomOutFirst: true)
+                if hasComposedContent, !isOverContentLimit, selectedDestinationMailbox != nil {
+                    await transition(to: .stamp, zoomOutFirst: true)
+                } else {
+                    await transition(to: .letterType, zoomOutFirst: true)
+                }
             case .letterType, .compose:
-                guard canSend else { return }
-                await transition(to: .stamp, zoomOutFirst: true)
+                guard hasComposedContent, !isOverContentLimit else { return }
+                if canSend {
+                    await transition(to: .stamp, zoomOutFirst: true)
+                } else if selectedDestinationMailbox == nil {
+                    await transition(to: .destination, zoomOutFirst: true)
+                } else {
+                    await transition(to: .returnAddress, zoomOutFirst: true)
+                }
             default:
                 break
             }
@@ -1361,13 +1446,25 @@ extension LetterCreationView {
         func goBack(dismiss: DismissAction? = nil) async {
             switch phase {
             case .destination:
-                if let dismiss {
+                if hasComposedContent || composeKind != nil {
+                    await transition(to: .letterType, zoomOutFirst: true)
+                } else if let dismiss {
                     dismiss()
                 }
             case .returnAddress:
-                await transition(to: .destination, zoomOutFirst: true)
+                if selectedDestinationMailbox == nil {
+                    await transition(to: .letterType, zoomOutFirst: true)
+                } else {
+                    await transition(to: .destination, zoomOutFirst: true)
+                }
             case .letterType, .compose:
-                await transition(to: .returnAddress, zoomOutFirst: true)
+                if selectedOriginMailbox == nil, selectedDestinationMailbox == nil {
+                    break
+                } else if selectedOriginMailbox == nil {
+                    await transition(to: .destination, zoomOutFirst: true)
+                } else {
+                    await transition(to: .returnAddress, zoomOutFirst: true)
+                }
             case .stamp:
                 isStampApplied = false
                 await transition(to: .letterType, zoomOutFirst: true)
@@ -1426,25 +1523,19 @@ extension LetterCreationView {
             finishComposing()
         }
 
-        /// Pops the composer and moves to the next unfinished step.
+        /// Pops the composer. Only jumps to send when both mailboxes are already chosen.
         @MainActor
         private func finishComposing() {
             guard hasComposedContent, !isOverContentLimit else { return }
             presentedComposer = nil
             scheduleAutosave()
 
-            let nextPhase: LetterCreationPhase
-            if selectedDestinationMailbox == nil {
-                nextPhase = .destination
-            } else if selectedOriginMailbox == nil {
-                nextPhase = .returnAddress
-            } else {
-                nextPhase = .stamp
-            }
-
-            transitionTask?.cancel()
-            transitionTask = Task { @MainActor in
-                await transition(to: nextPhase, zoomOutFirst: false)
+            // Stay on the letter so offline drafts don't dump the user into a network picker.
+            if selectedDestinationMailbox != nil, selectedOriginMailbox != nil {
+                transitionTask?.cancel()
+                transitionTask = Task { @MainActor in
+                    await transition(to: .stamp, zoomOutFirst: false)
+                }
             }
         }
 
@@ -1899,6 +1990,18 @@ extension LetterCreationView {
         LetterCreationView(viewmodel: .preview(
             phase: .returnAddress,
             ownedMailboxes: []
+        ), loadsOnAppear: false)
+    }
+    .environment(Router())
+}
+
+#Preview("Draft Without Mailboxes") {
+    NavigationStack {
+        LetterCreationView(viewmodel: .preview(
+            phase: .letterType,
+            ownedMailboxes: [],
+            letterText: PreviewData.sampleLetterText,
+            composeKind: .text
         ), loadsOnAppear: false)
     }
     .environment(Router())

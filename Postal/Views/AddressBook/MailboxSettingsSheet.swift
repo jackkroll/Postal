@@ -13,7 +13,11 @@ struct MailboxSettingsSheet: View {
     @State private var isConfirmingRelinquish = false
     @State private var previewFailure: PostalLoadFailure?
     @State private var errorMessage: String?
-    @State private var sharePlaceholderMessage: String?
+    @State private var showQRSheet = false
+
+    private var shareURL: URL {
+        DeepLink.inviteURL(for: mailbox.id)
+    }
 
     var body: some View {
         NavigationStack {
@@ -23,14 +27,6 @@ struct MailboxSettingsSheet: View {
                     LabeledContent("Code", value: mailbox.id.code)
                 } header: {
                     Text("Mailbox")
-                }
-
-                Section {
-                    Button {
-                        sharePlaceholderMessage = "Sharing a mailbox link isn’t available yet."
-                    } label: {
-                        Label("Share Mailbox URL", systemImage: "square.and.arrow.up")
-                    }
                 }
 
                 Section {
@@ -126,6 +122,9 @@ struct MailboxSettingsSheet: View {
             .task {
                 await loadPreview()
             }
+            .sheet(isPresented: $showQRSheet) {
+                MailboxInviteShareQRSheet(mailbox: mailbox)
+            }
             .alert(
                 "Relinquish Mailbox?",
                 isPresented: $isConfirmingRelinquish
@@ -136,19 +135,6 @@ struct MailboxSettingsSheet: View {
                 }
             } message: {
                 Text(relinquishConfirmationMessage)
-            }
-            .alert(
-                "Share",
-                isPresented: Binding(
-                    get: { sharePlaceholderMessage != nil },
-                    set: { if !$0 { sharePlaceholderMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {
-                    sharePlaceholderMessage = nil
-                }
-            } message: {
-                Text(sharePlaceholderMessage ?? "")
             }
         }
         .presentationDetents([.medium, .large])
@@ -197,10 +183,107 @@ struct MailboxSettingsSheet: View {
     }
 }
 
-#Preview {
+struct MailboxInviteShareQRSheet: View {
+    let mailbox: MailboxSummary
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var qrImage: UIImage?
+    @State private var didFailGeneration = false
+
+    private var shareURL: URL {
+        DeepLink.inviteURL(for: mailbox.id)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                qrContent
+                    .padding()
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+
+                Text(shareURL.absoluteString)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .textSelection(.enabled)
+
+                ShareLink(item: shareURL) {
+                    Label("Share Link", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationTitle(mailbox.label)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if #available(iOS 26.0, *) {
+                        Button(role: .cancel) { dismiss() }
+                    } else {
+                        Button("Done") { dismiss() }
+                    }
+                }
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .subtitle) {
+                        Text(mailbox.locationLabel)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                }
+            }
+            .task(id: shareURL.absoluteString) {
+                await generateQR()
+            }
+
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    @ViewBuilder
+    private var qrContent: some View {
+        if let qrImage {
+            Image(uiImage: qrImage)
+                .interpolation(.none)
+                .resizable()
+                .scaledToFit()
+        } else if didFailGeneration {
+            ContentUnavailableView(
+                "QR Unavailable",
+                systemImage: "qrcode",
+                description: Text("Couldn’t generate a QR code for this link.")
+            )
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(.tertiarySystemFill))
+                .overlay {
+                    ProgressView()
+                }
+                .redacted(reason: .placeholder)
+        }
+    }
+
+    @MainActor
+    private func generateQR() async {
+        didFailGeneration = false
+        qrImage = nil
+        let urlString = shareURL.absoluteString
+        let image = await QRCodeImage.make(from: urlString)
+        qrImage = image
+        didFailGeneration = image == nil
+    }
+}
+
+#Preview("Settings") {
     MailboxSettingsSheet(
         mailbox: PreviewData.ownedMailboxes[0],
         api: APIClient(),
         onRelinquished: {}
     )
+}
+
+#Preview("QR"){
+    MailboxInviteShareQRSheet(mailbox: PreviewData.ownedMailboxes[0])
 }

@@ -30,6 +30,7 @@ enum APIEndpoint {
     case shipmentLetter(id: String)
     case publicTrack(trackingNumber: String)
     case publicTrackRoute(trackingNumber: String)
+    case mailboxInvite(mailboxID: String)
     case location(code: Int)
     case meAddressbook
     case addAddressToBook
@@ -89,6 +90,8 @@ enum APIEndpoint {
             return "/track/\(trackingNumber)"
         case let .publicTrackRoute(trackingNumber):
             return "/track/\(trackingNumber)/route"
+        case let .mailboxInvite(mailboxID):
+            return "/invite/\(mailboxID)"
         case let .location(code):
             return "/api/locations/\(code)"
         case .meAddressbook, .addAddressToBook:

@@ -14,6 +14,8 @@ struct AddressBook: View {
     var onSelect: ((AddressBookEntrySummary) -> Void)? = nil
     private let loadsOnAppear: Bool
 
+    @Namespace private var scannerTransition
+
     private var isSelecting: Bool { onSelect != nil }
 
     init(
@@ -35,6 +37,7 @@ struct AddressBook: View {
             }
         }
         .navigationTitle(isSelecting ? "Choose Address" : "Address Book")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if #available(iOS 26.0, *) {
                 ToolbarSpacer(placement: .bottomBar)
@@ -45,6 +48,14 @@ struct AddressBook: View {
                 } label: {
                     Label("Add Address", systemImage: "plus")
                 }
+            }
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    viewmodel.isInviteScannerPresented = true
+                } label: {
+                    Label("Scan Invite", systemImage: "qrcode.viewfinder")
+                }
+                .inviteScannerTransitionSource(id: "inviteScanner", in: scannerTransition)
             }
             if !isSelecting, viewmodel.canClaimMailbox {
                 ToolbarItem(placement: .bottomBar) {
@@ -90,6 +101,48 @@ struct AddressBook: View {
             ) {
                 viewmodel.handleRelinquished(mailbox)
             }
+        }
+        .sheet(item: $viewmodel.qrMailbox) { mailbox in
+            MailboxInviteShareQRSheet(mailbox: mailbox)
+        }
+        .sheet(isPresented: $viewmodel.isInviteScannerPresented) {
+            MailboxInviteQRScannerSheet(
+                onCode: { payload in
+                    if let mailboxID = DeepLink.mailboxID(fromInvitePayload: payload) {
+                        viewmodel.scannedInviteMailboxID = mailboxID
+                    } else {
+                        viewmodel.inviteScanError = "That QR code isn’t a Postal mailbox invite."
+                    }
+                },
+                onFailure: { message in
+                    viewmodel.inviteScanError = message
+                }
+            )
+            .inviteScannerZoomTransition(id: "inviteScanner", in: scannerTransition)
+        }
+        .sheet(item: $viewmodel.scannedInviteMailboxID) { mailboxID in
+            MailboxInviteImportSheet(
+                mailboxID: mailboxID,
+                api: viewmodel.api,
+                onSaved: { saved, _ in
+                    viewmodel.applyUpdate(saved)
+                    viewmodel.scannedInviteMailboxID = nil
+                },
+                onDismissed: {
+                    viewmodel.scannedInviteMailboxID = nil
+                }
+            )
+        }
+        .alert(
+            "Couldn’t Read Invite",
+            isPresented: Binding(
+                get: { viewmodel.inviteScanError != nil },
+                set: { if !$0 { viewmodel.inviteScanError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { viewmodel.inviteScanError = nil }
+        } message: {
+            Text(viewmodel.inviteScanError ?? "")
         }
         .task {
             guard loadsOnAppear else { return }
@@ -196,7 +249,9 @@ struct MyMailboxesSection: View {
                 ForEach(viewmodel.ownedMailboxes) { mailbox in
                     OwnedMailboxActionsRow(
                         mailbox: mailbox,
-                        onSettings: { viewmodel.settingsMailbox = mailbox }
+                        shareURL: DeepLink.inviteURL(for: mailbox.id),
+                        onSettings: { viewmodel.settingsMailbox = mailbox },
+                        onShowQR: { viewmodel.qrMailbox = mailbox }
                     )
                 }
             }
@@ -521,33 +576,44 @@ struct AddressEditView: View {
 }
 
 struct OwnedMailboxActionsRow: View {
-    @Environment(Router.self) private var router: Router?
-
     let mailbox: MailboxSummary
+    let shareURL: URL
     var onSettings: () -> Void
+    var onShowQR: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            OwnedMailboxRowView(mailbox: mailbox)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button {
-                onSettings()
-            } label: {
-                Image(systemName: "gearshape")
+        HStack(alignment: .center, spacing: 8) {
+            NavigationLink(value: ViewRoute.ship(origin: mailbox)) {
+                OwnedMailboxRowView(mailbox: mailbox)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
+                
+                Button {
+                    onSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonBorderShape(.circle)
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Settings")
+                
+                Button {
+                    onShowQR()
+                } label: {
+                    Image(systemName: "qrcode")
+                }
+                .buttonBorderShape(.circle)
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Show QR Code")
+                
+                ShareLink(item: shareURL) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .buttonBorderShape(.circle)
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Share")
             }
-            .buttonBorderShape(.circle)
-            .buttonStyle(.bordered)
-            .accessibilityLabel("Settings")
-
-            Button {
-                router?.push(.ship(origin: mailbox))
-            } label: {
-                Image(systemName: "paperplane.fill")
-            }
-            .buttonBorderShape(.circle)
-            .buttonStyle(.borderedProminent)
-            .accessibilityLabel("Send")
+            
         }
     }
 }
@@ -561,8 +627,6 @@ struct OwnedMailboxRowView: View {
                 .font(.body.weight(.semibold))
             HStack(spacing: 6) {
                 Text(mailbox.locationLabel)
-                Text(mailbox.id.code)
-                    .font(.caption.monospaced())
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -611,7 +675,11 @@ extension AddressBook {
         var errorMsg: String?
         var editor: AddressEditorMode?
         var settingsMailbox: MailboxSummary?
+        var qrMailbox: MailboxSummary?
         var isPaywallPresented = false
+        var isInviteScannerPresented = false
+        var scannedInviteMailboxID: MailboxID?
+        var inviteScanError: String?
 
         init(
             api: APIClient,

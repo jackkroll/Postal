@@ -5,9 +5,13 @@ struct RootView: View {
     @State private var router = Router()
     @State private var authState = AuthStateObserver()
     @Bindable private var onboarding = AppServices.onboarding
+    @Bindable private var pendingInvites = AppServices.pendingMailboxInvites
 
     var body: some View {
-        NavigationStack(path: $router.path) {
+        NavigationStack(path: Binding(
+            get: { router.path },
+            set: { router.setPath($0) }
+        )) {
             Group {
                 if authState.isSignedIn {
                     MainTabView()
@@ -24,6 +28,13 @@ struct RootView: View {
         .environment(router)
         .fullScreenCover(isPresented: onboardingCoverBinding) {
             OnboardingFlowView(store: onboarding)
+        }
+        .sheet(item: inviteImportBinding) { mailboxID in
+            MailboxInviteImportSheet(
+                mailboxID: mailboxID,
+                api: AppServices.api,
+                onDismissed: { pendingInvites.clear() }
+            )
         }
         .onOpenURL(perform: handleIncomingURL)
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
@@ -51,10 +62,32 @@ struct RootView: View {
         )
     }
 
-    /// Opens `https://postal.jackk.dev/track/{number}` (and `postal://track/{number}`).
+    /// Import sheet only when signed in and not covered by onboarding (onboarding presents its own).
+    private var inviteImportBinding: Binding<MailboxID?> {
+        Binding(
+            get: {
+                guard authState.isSignedIn, !onboarding.shouldPresent else { return nil }
+                return pendingInvites.offeredMailboxID
+            },
+            set: { newValue in
+                if newValue == nil {
+                    pendingInvites.clear()
+                }
+            }
+        )
+    }
+
+    /// Opens track / invite URLs (`https://postal.jackk.dev/…` and `postal://…`).
     private func handleIncomingURL(_ url: URL) {
         guard let deepLink = DeepLink.parse(url) else { return }
-        router.open(deepLink)
+        switch deepLink {
+        case .track:
+            // Avoid yanking the user out of onboarding for tracking links.
+            guard !onboarding.shouldPresent else { return }
+            router.open(deepLink)
+        case let .invite(mailboxID):
+            pendingInvites.offer(mailboxID)
+        }
     }
 
     /// Decide whether this account needs onboarding (new) or is grandfathered (existing).

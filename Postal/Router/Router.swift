@@ -12,10 +12,21 @@ import Observation
 
 @Observable class Router {
     var path: [ViewRoute] = []
-    
+
     func push(_ route: ViewRoute) {
+        guard path.last != route else { return }
         path.append(route)
     }
+
+    func setPath(_ newPath: [ViewRoute]) {
+        if newPath.count == path.count + 1,
+           let appended = newPath.last,
+           path.last == appended {
+            return
+        }
+        path = newPath
+    }
+
     func pop() {
         path.removeLast()
     }
@@ -60,6 +71,9 @@ import Observation
             } else {
                 path = [route]
             }
+        case .invite:
+            // Handled by RootView / PendingMailboxInviteStore (address-book prompt).
+            break
         }
     }
 

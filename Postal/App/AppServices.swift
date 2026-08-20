@@ -6,6 +6,7 @@ enum AppServices {
     static let letterContent: LetterContentProviding = LetterContentService()
     static let letterDrafts: DraftLetterStoring = DraftLetterStore()
     static let pendingTimeCapsules: PendingTimeCapsuleStoring = PendingTimeCapsuleStore()
+    static let pendingMailboxInvites = PendingMailboxInviteStore()
     static let onboarding = OnboardingStore()
     static let pushNotifications: PushNotificationsProviding = PushNotificationService.shared
     static let api: APIClient = {

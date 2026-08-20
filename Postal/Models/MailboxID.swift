@@ -46,11 +46,13 @@ enum MailboxLookupError: LocalizedError {
 }
 
 /// Composite mailbox identity as used by the API: `{postOfficeID}:{CODE}`.
-struct MailboxID: Hashable, Codable, RawRepresentable, CustomStringConvertible {
+struct MailboxID: Hashable, Codable, RawRepresentable, CustomStringConvertible, Identifiable {
     let postOfficeID: Int
     let code: String
 
     var rawValue: String { "\(postOfficeID):\(code)" }
+
+    var id: String { rawValue }
 
     var description: String { rawValue }
 
