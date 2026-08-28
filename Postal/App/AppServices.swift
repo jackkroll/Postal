@@ -5,6 +5,7 @@ enum AppServices {
     static let auth: AuthProviding = FirebaseAuthService()
     static let letterContent: LetterContentProviding = LetterContentService()
     static let letterDrafts: DraftLetterStoring = DraftLetterStore()
+    static let inboundLetterOpens: InboundLetterOpenStoring = InboundLetterOpenStore.shared
     static let pendingTimeCapsules: PendingTimeCapsuleStoring = PendingTimeCapsuleStore()
     static let pendingMailboxInvites = PendingMailboxInviteStore()
     static let onboarding = OnboardingStore()

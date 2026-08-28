@@ -25,11 +25,45 @@ enum PreviewData {
     }
 
     // MARK: - Post Offices
+    // Generic facility names with real, widely separated US coordinates so
+    // tracking maps read as cross-country (Boston → Chicago → Denver → Seattle).
 
-    static let mainStreetPostOffice = PostOffice(id: 1, name: "Main Street Post Office", lat: 37.7749, lon: -122.4194, tier: 0)
-    static let centralSortingFacility = PostOffice(id: 42, name: "Central Sorting Facility", lat: 41.8781, lon: -87.6298, tier: 1)
-    static let riversideStation = PostOffice(id: 87, name: "Riverside Station", lat: 33.9533, lon: -117.3962, tier: 2)
-    static let westsideDeliveryOffice = PostOffice(id: 156, name: "Westside Delivery Office", lat: 34.0522, lon: -118.2437, tier: 3)
+    static let mainStreetPostOffice = PostOffice(
+        id: 1,
+        name: "Main Street Post Office",
+        lat: 42.3601,
+        lon: -71.0589,
+        tier: 0,
+        city: "Boston",
+        state: "MA"
+    )
+    static let centralSortingFacility = PostOffice(
+        id: 42,
+        name: "Central Sorting Facility",
+        lat: 41.8781,
+        lon: -87.6298,
+        tier: 1,
+        city: "Chicago",
+        state: "IL"
+    )
+    static let riversideStation = PostOffice(
+        id: 87,
+        name: "Riverside Station",
+        lat: 39.7392,
+        lon: -104.9903,
+        tier: 2,
+        city: "Denver",
+        state: "CO"
+    )
+    static let westsideDeliveryOffice = PostOffice(
+        id: 156,
+        name: "Westside Delivery Office",
+        lat: 47.6062,
+        lon: -122.3321,
+        tier: 3,
+        city: "Seattle",
+        state: "WA"
+    )
 
     static let postOffices = [mainStreetPostOffice, centralSortingFacility, riversideStation, westsideDeliveryOffice]
 
@@ -41,6 +75,14 @@ enum PreviewData {
         latitude: mainStreetPostOffice.lat ?? 0,
         longitude: mainStreetPostOffice.lon ?? 0,
         tier: mainStreetPostOffice.tier ?? 0
+    )
+
+    static let centralSortingLocation = Location(
+        code: centralSortingFacility.id,
+        name: centralSortingFacility.name,
+        latitude: centralSortingFacility.lat ?? 0,
+        longitude: centralSortingFacility.lon ?? 0,
+        tier: centralSortingFacility.tier ?? 0
     )
 
     static let westsideLocation = Location(
@@ -58,6 +100,15 @@ enum PreviewData {
         longitude: riversideStation.lon ?? 0,
         tier: riversideStation.tier ?? 0
     )
+
+    static var locationsByCode: [Int: Location] {
+        [
+            mainStreetLocation.code: mainStreetLocation,
+            centralSortingLocation.code: centralSortingLocation,
+            riversideLocation.code: riversideLocation,
+            westsideLocation.code: westsideLocation,
+        ]
+    }
 
     // MARK: - Mailboxes
 
@@ -90,9 +141,9 @@ enum PreviewData {
             owned: false
         ),
         MailboxSummary(
-            id: MailboxID(postOfficeID: mainStreetPostOffice.id, code: "9ZZZ9"),
-            postOfficeID: mainStreetPostOffice.id,
-            postOfficeName: mainStreetPostOffice.name,
+            id: MailboxID(postOfficeID: riversideStation.id, code: "9ZZZ9"),
+            postOfficeID: riversideStation.id,
+            postOfficeName: riversideStation.name,
             label: "Box #3",
             ownerUserID: "other-user-2",
             owned: false
@@ -114,9 +165,9 @@ enum PreviewData {
             owned: false
         ),
         MailboxSummary(
-            id: MailboxID(postOfficeID: riversideStation.id, code: "FAIL55"),
-            postOfficeID: riversideStation.id,
-            postOfficeName: riversideStation.name,
+            id: MailboxID(postOfficeID: westsideDeliveryOffice.id, code: "FAIL55"),
+            postOfficeID: westsideDeliveryOffice.id,
+            postOfficeName: westsideDeliveryOffice.name,
             label: "Box #55",
             ownerUserID: "other-user-5",
             owned: false
@@ -133,44 +184,44 @@ enum PreviewData {
         AddressBookEntrySummary(
             id: "addr-entry-1",
             nickname: "Alex",
-            mailboxID: destinationMailboxes[0].id,
+            mailboxID: destinationMailboxes[3].id,
             notes: "College roommate",
-            postOfficeID: destinationMailboxes[0].postOfficeID,
-            postOfficeName: destinationMailboxes[0].postOfficeName,
-            mailboxLabel: destinationMailboxes[0].label,
+            postOfficeID: destinationMailboxes[3].postOfficeID,
+            postOfficeName: destinationMailboxes[3].postOfficeName,
+            mailboxLabel: destinationMailboxes[3].label,
             createdAt: daysAgo(30),
             updatedAt: daysAgo(5)
         ),
         AddressBookEntrySummary(
             id: "addr-entry-2",
             nickname: "Jordan",
-            mailboxID: destinationMailboxes[1].id,
-            notes: nil,
-            postOfficeID: destinationMailboxes[1].postOfficeID,
-            postOfficeName: destinationMailboxes[1].postOfficeName,
-            mailboxLabel: destinationMailboxes[1].label,
+            mailboxID: destinationMailboxes[2].id,
+            notes: "Sends a postcard every month",
+            postOfficeID: destinationMailboxes[2].postOfficeID,
+            postOfficeName: destinationMailboxes[2].postOfficeName,
+            mailboxLabel: destinationMailboxes[2].label,
             createdAt: daysAgo(14),
             updatedAt: daysAgo(14)
         ),
         AddressBookEntrySummary(
             id: "addr-entry-3",
-            nickname: "Sam (Riverside)",
-            mailboxID: destinationMailboxes[2].id,
-            notes: "Sends letters every few weeks",
-            postOfficeID: destinationMailboxes[2].postOfficeID,
-            postOfficeName: destinationMailboxes[2].postOfficeName,
-            mailboxLabel: destinationMailboxes[2].label,
+            nickname: "Sam",
+            mailboxID: destinationMailboxes[0].id,
+            notes: "Same post office as me",
+            postOfficeID: destinationMailboxes[0].postOfficeID,
+            postOfficeName: destinationMailboxes[0].postOfficeName,
+            mailboxLabel: destinationMailboxes[0].label,
             createdAt: daysAgo(7),
             updatedAt: hoursAgo(12)
         ),
         AddressBookEntrySummary(
             id: "addr-entry-4",
-            nickname: "Westside Drop",
-            mailboxID: destinationMailboxes[3].id,
-            notes: "Work contact",
-            postOfficeID: destinationMailboxes[3].postOfficeID,
-            postOfficeName: destinationMailboxes[3].postOfficeName,
-            mailboxLabel: destinationMailboxes[3].label,
+            nickname: "Riley",
+            mailboxID: destinationMailboxes[1].id,
+            notes: "Work pen pal",
+            postOfficeID: destinationMailboxes[1].postOfficeID,
+            postOfficeName: destinationMailboxes[1].postOfficeName,
+            mailboxLabel: destinationMailboxes[1].label,
             createdAt: daysAgo(2),
             updatedAt: daysAgo(2)
         ),
@@ -204,7 +255,7 @@ enum PreviewData {
     static let letterInTransit = LetterSummary(
         trackingNumber: inTransitTrackingNumber,
         origin: LetterEndpoint(mailboxID: ownedMailboxes[0].id),
-        destination: LetterEndpoint(mailboxID: destinationMailboxes[0].id),
+        destination: LetterEndpoint(mailboxID: destinationMailboxes[3].id),
         status: .inTransit,
         hasLetter: true,
         letterFormat: .text,
@@ -368,6 +419,7 @@ enum PreviewData {
             RouteTimelineEntry(facilityID: 1, tier: 0, arrival: daysAgo(3, hour: 9), departure: daysAgo(3, hour: 10)),
             RouteTimelineEntry(facilityID: 42, tier: 1, arrival: daysAgo(2, hour: 14), departure: daysAgo(2, hour: 16)),
             RouteTimelineEntry(facilityID: 87, tier: 2, arrival: hoursAgo(6), departure: nil),
+            RouteTimelineEntry(facilityID: 156, tier: 3, arrival: daysFromNow(1, hour: 10), departure: nil),
         ],
         events: [
             ShipmentTrackingEvent(
@@ -409,14 +461,6 @@ enum PreviewData {
                 facilityID: 87,
                 scheduledFor: hoursAgo(6),
                 recordedAt: hoursAgo(6)
-            ),
-            ShipmentTrackingEvent(
-                eventID: 6,
-                eventType: "departed",
-                facility: riversideStation,
-                facilityID: 87,
-                scheduledFor: hoursAgo(2),
-                recordedAt: hoursAgo(2)
             ),
         ]
     )

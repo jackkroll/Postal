@@ -5,6 +5,11 @@ extension ShipmentStatus {
         rawValue.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
+    /// Delivered or failed — shown under Completed, not in the active list.
+    var isTerminal: Bool {
+        self == .delivered || self == .failed
+    }
+
     var iconName: String {
         switch self {
         case .awaitingPickup: "tray.full.fill"

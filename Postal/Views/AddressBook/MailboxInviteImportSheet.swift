@@ -118,9 +118,6 @@ struct MailboxInviteImportSheet: View {
         do {
             let fetched = try await api.fetchMailboxInvite(mailboxID: mailboxID)
             invite = fetched
-            if nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                nickname = fetched.label
-            }
             loadFailure = nil
         } catch {
             guard !error.isPostalCancellation else { return }

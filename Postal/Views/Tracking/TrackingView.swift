@@ -122,6 +122,7 @@ struct TrackingView: View {
             }
             .task {
                 MapKitWarmup.prepareIfNeeded()
+                viewmodel.recordInboundOpenIfNeeded()
             }
             .toolbar {
                 Button {
@@ -324,6 +325,7 @@ extension TrackingView {
         var trackingNumber: String
         var letterSummary: LetterSummary?
         var isRecipient: Bool
+        var inboundOpenStore: InboundLetterOpenStoring
         var trackingInfo: TrackingInfo?
         var trackingRoute: TrackingRoute?
         var locationsByCode: [Int: Location] = [:]
@@ -397,12 +399,14 @@ extension TrackingView {
             trackingNumber: String? = nil,
             letterSummary: LetterSummary? = nil,
             isRecipient: Bool = false,
+            inboundOpenStore: InboundLetterOpenStoring = AppServices.inboundLetterOpens,
             autoLookup: Bool = true
         ) {
             self.api = apiClient
             self.letterService = letterService
             self.letterSummary = letterSummary
             self.isRecipient = isRecipient
+            self.inboundOpenStore = inboundOpenStore
             if let trackingNumber {
                 self.trackingNumber = trackingNumber
                 if autoLookup {
@@ -411,6 +415,11 @@ extension TrackingView {
             } else {
                 self.trackingNumber = ""
             }
+        }
+
+        func recordInboundOpenIfNeeded() {
+            guard isRecipient, let shipmentID, !shipmentID.isEmpty else { return }
+            inboundOpenStore.markOpened(shipmentID)
         }
 
         func pushRouteMap() {

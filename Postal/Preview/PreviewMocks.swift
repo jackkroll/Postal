@@ -88,9 +88,14 @@ extension LettersListView.ViewModel {
     static func preview(
         letters: [LetterSummary] = PreviewData.letters,
         inboundLetters: [LetterSummary] = [],
-        drafts: [LetterDraft] = []
+        drafts: [LetterDraft] = [],
+        openedInboundShipmentIDs: Set<String> = []
     ) -> LettersListView.ViewModel {
-        let viewModel = LettersListView.ViewModel(api: APIClient())
+        let openStore = PreviewInboundLetterOpenStore(openedIDs: openedInboundShipmentIDs)
+        let viewModel = LettersListView.ViewModel(
+            api: APIClient(),
+            inboundOpenStore: openStore
+        )
         viewModel.letters = letters
         viewModel.inboundLetters = inboundLetters
         viewModel.drafts = drafts
@@ -99,12 +104,28 @@ extension LettersListView.ViewModel {
         viewModel.mailboxesByID = Dictionary(
             uniqueKeysWithValues: PreviewData.allMailboxes.map { ($0.id, $0) }
         )
-        viewModel.locationsByCode = [
-            PreviewData.mainStreetLocation.code: PreviewData.mainStreetLocation,
-            PreviewData.westsideLocation.code: PreviewData.westsideLocation,
-            PreviewData.riversideLocation.code: PreviewData.riversideLocation,
-        ]
+        viewModel.locationsByCode = PreviewData.locationsByCode
         return viewModel
+    }
+}
+
+final class PreviewInboundLetterOpenStore: InboundLetterOpenStoring {
+    private var openedIDs: Set<String>
+
+    init(openedIDs: Set<String> = []) {
+        self.openedIDs = openedIDs
+    }
+
+    func hasOpened(_ shipmentID: String) -> Bool {
+        openedIDs.contains(shipmentID)
+    }
+
+    func markOpened(_ shipmentID: String) {
+        openedIDs.insert(shipmentID)
+    }
+
+    func prune(keeping shipmentIDs: Set<String>) {
+        openedIDs = openedIDs.intersection(shipmentIDs)
     }
 }
 
@@ -123,16 +144,13 @@ extension TrackingView.ViewModel {
             letterService: PreviewLetterContentService(),
             letterSummary: letterSummary,
             isRecipient: isRecipient,
+            inboundOpenStore: PreviewInboundLetterOpenStore(),
             autoLookup: false
         )
         viewModel.trackingNumber = trackingNumber
         viewModel.trackingRoute = route
         viewModel.trackingInfo = trackingInfo
-        viewModel.locationsByCode = [
-            PreviewData.mainStreetLocation.code: PreviewData.mainStreetLocation,
-            PreviewData.westsideLocation.code: PreviewData.westsideLocation,
-            PreviewData.riversideLocation.code: PreviewData.riversideLocation,
-        ]
+        viewModel.locationsByCode = PreviewData.locationsByCode
         viewModel.errorMessage = errorMessage
         viewModel.isLoading = isLoading
         return viewModel

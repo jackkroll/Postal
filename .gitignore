@@ -1,0 +1,16 @@
+# Fastlane / Bundler
+vendor/
+.bundle/
+
+# Snapshot / Frameit generated outputs (keep durable assets in frameit_assets/)
+fastlane/screenshots/**/*.png
+fastlane/screenshots/**/screenshots.html
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output/
+
+# Local
+fastlane/asc_api_key.json
+*.mobileprovision
+*.p12
+.derivedData/

@@ -1,0 +1,36 @@
+# Dedicated renamed simulators (avoids duplicate device-name collisions).
+# iPhone 16 Pro @ iOS 26.0 and iPad Pro 11-inch (M5) @ iOS 26.0
+devices([
+  "Postal Screenshots iPhone",
+  "Postal Screenshots iPad"
+])
+
+languages([
+  "en-US"
+])
+
+scheme("Postal")
+
+# Snapfile is eval'd (no reliable __dir__). Pin paths via FastlaneFolder
+# so Snapshot never prompts when cwd isn't the repo root.
+_fastlane_dir = FastlaneCore::FastlaneFolder.path
+_repo_root = File.expand_path("..", _fastlane_dir)
+project(File.join(_repo_root, "Postal.xcodeproj"))
+output_directory(File.join(_fastlane_dir, "screenshots"))
+
+clear_previous_screenshots(true)
+
+override_status_bar(true)
+
+concurrent_simulators(false)
+
+# Arguments passed in addition to Snapshot's -FASTLANE_SNAPSHOT
+# Screen-specific args are set in PostalScreenshots.swift.
+launch_arguments([
+  "-UIViewAnimationDisabled YES"
+])
+
+stop_after_first_error(true)
+
+# Helper lives in PostalUITests/ (compiled) plus project-root/fastlane copies
+# for Snapshot's Dir["./**/SnapshotHelper.swift"] discovery.

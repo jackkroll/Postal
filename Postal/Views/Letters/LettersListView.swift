@@ -19,6 +19,8 @@ struct LettersListView: View {
     @AppStorage(AppStorageKeys.showInboundLetters) private var showInboundLetters = true
     @State private var selectedTab: LettersTab = .sent
     @State private var viewmodel: ViewModel
+    @State private var showCompletedSent = false
+    @State private var showCompletedInbound = false
     private let loadsOnAppear: Bool
 
     init(
@@ -30,6 +32,7 @@ struct LettersListView: View {
     }
 
     var body: some View {
+        @Bindable var viewmodel = viewmodel
         Group {
             if showInboundLetters {
                 tabbedContent
@@ -38,6 +41,11 @@ struct LettersListView: View {
             }
         }
         .navigationTitle("My Letters")
+        .searchable(
+            text: $viewmodel.searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search letters"
+        )
         .toolbar {
             ToolbarItem(placement: .bottomBar) {
                 Button {
@@ -81,6 +89,15 @@ struct LettersListView: View {
                 }
             }
         }
+        .onChange(of: viewmodel.searchText) { _, _ in
+            expandCompletedIfNeededForSearch()
+        }
+        .onChange(of: viewmodel.completedSentLetters.count) { _, _ in
+            expandCompletedIfNeededForSearch()
+        }
+        .onChange(of: viewmodel.completedInboundLetters.count) { _, _ in
+            expandCompletedIfNeededForSearch()
+        }
         .task {
             guard loadsOnAppear else { return }
             viewmodel.loadDrafts()
@@ -97,6 +114,8 @@ struct LettersListView: View {
         }
         .onAppear {
             viewmodel.loadDrafts()
+            viewmodel.refreshInboundArchiveState()
+            expandCompletedIfNeededForSearch()
         }
     }
 
@@ -139,6 +158,8 @@ struct LettersListView: View {
                 NavigationLink("Ship a Letter", value: ViewRoute.ship())
                     .buttonStyle(.borderedProminent)
             }
+        } else if viewmodel.hasSentSearchQuery, viewmodel.sentSearchHasNoMatches {
+            ContentUnavailableView.search(text: viewmodel.searchText)
         } else {
             List {
                 if let failure = viewmodel.sentLoadFailure, viewmodel.letters.isEmpty {
@@ -154,44 +175,45 @@ struct LettersListView: View {
                     }
                 }
 
-                if !viewmodel.drafts.isEmpty {
+                if !viewmodel.filteredDrafts.isEmpty {
                     Section("Drafts") {
-                        ForEach(viewmodel.drafts) { draft in
+                        ForEach(viewmodel.filteredDrafts) { draft in
                             NavigationLink(value: ViewRoute.ship(draftID: draft.id)) {
                                 DraftLetterRowView(draft: draft)
                             }
                         }
                         .onDelete { indexSet in
-                            viewmodel.deleteDrafts(at: indexSet)
+                            viewmodel.deleteFilteredDrafts(at: indexSet)
                         }
                     }
 
                     Section("Sent") {
-                        if viewmodel.letters.isEmpty, viewmodel.sentLoadFailure == nil {
+                        sentActiveRows
+                        if viewmodel.activeSentLetters.isEmpty,
+                           viewmodel.completedSentLetters.isEmpty,
+                           viewmodel.sentLoadFailure == nil,
+                           !viewmodel.hasSentSearchQuery {
                             Text("No sent letters yet.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(viewmodel.letters) { letter in
-                                NavigationLink(value: ViewRoute.track(trackingNum: letter.trackingNumber, letter: letter)) {
-                                    LetterRowView(
-                                        letter: letter,
-                                        origin: viewmodel.resolved(letter.origin),
-                                        destination: viewmodel.resolved(letter.destination)
-                                    )
-                                }
-                            }
                         }
                     }
+
+                    if !viewmodel.completedSentLetters.isEmpty {
+                        completedSection(
+                            letters: viewmodel.completedSentLetters,
+                            isExpanded: $showCompletedSent,
+                            isRecipient: false
+                        )
+                    }
                 } else {
-                    ForEach(viewmodel.letters) { letter in
-                        NavigationLink(value: ViewRoute.track(trackingNum: letter.trackingNumber, letter: letter)) {
-                            LetterRowView(
-                                letter: letter,
-                                origin: viewmodel.resolved(letter.origin),
-                                destination: viewmodel.resolved(letter.destination)
-                            )
-                        }
+                    sentActiveRows
+                    if !viewmodel.completedSentLetters.isEmpty {
+                        completedSection(
+                            letters: viewmodel.completedSentLetters,
+                            isExpanded: $showCompletedSent,
+                            isRecipient: false
+                        )
                     }
                 }
             }
@@ -209,6 +231,19 @@ struct LettersListView: View {
     }
 
     @ViewBuilder
+    private var sentActiveRows: some View {
+        ForEach(viewmodel.activeSentLetters) { letter in
+            NavigationLink(value: ViewRoute.track(trackingNum: letter.trackingNumber, letter: letter)) {
+                LetterRowView(
+                    letter: letter,
+                    origin: viewmodel.resolved(letter.origin),
+                    destination: viewmodel.resolved(letter.destination)
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
     private var inboundContent: some View {
         if viewmodel.shouldShowInboundLoading {
             ProgressView("Loading inbound letters…")
@@ -221,9 +256,11 @@ struct LettersListView: View {
             } description: {
                 Text("Letters shipping to your mailboxes will appear here.")
             }
+        } else if viewmodel.hasInboundSearchQuery, viewmodel.inboundSearchHasNoMatches {
+            ContentUnavailableView.search(text: viewmodel.searchText)
         } else {
             List {
-                ForEach(viewmodel.inboundLetters) { letter in
+                ForEach(viewmodel.activeInboundLetters) { letter in
                     NavigationLink(value: ViewRoute.track(
                         trackingNum: letter.trackingNumber,
                         letter: letter,
@@ -236,6 +273,14 @@ struct LettersListView: View {
                         )
                     }
                 }
+
+                if !viewmodel.completedInboundLetters.isEmpty {
+                    completedSection(
+                        letters: viewmodel.completedInboundLetters,
+                        isExpanded: $showCompletedInbound,
+                        isRecipient: true
+                    )
+                }
             }
             .refreshable {
                 await viewmodel.loadInboundLetters()
@@ -246,6 +291,58 @@ struct LettersListView: View {
                         .padding(.top, 8)
                 }
             }
+        }
+    }
+
+    private func completedSection(
+        letters: [LetterSummary],
+        isExpanded: Binding<Bool>,
+        isRecipient: Bool
+    ) -> some View {
+        Section {
+            if isExpanded.wrappedValue {
+                ForEach(letters) { letter in
+                    NavigationLink(value: ViewRoute.track(
+                        trackingNum: letter.trackingNumber,
+                        letter: letter,
+                        isRecipient: isRecipient
+                    )) {
+                        LetterRowView(
+                            letter: letter,
+                            origin: viewmodel.resolved(letter.origin),
+                            destination: viewmodel.resolved(letter.destination)
+                        )
+                    }
+                }
+            }
+        } header: {
+            Button {
+                withAnimation(.snappy) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(isRecipient ? "Arrived" : "Delivered")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func expandCompletedIfNeededForSearch() {
+        let query = viewmodel.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        if !viewmodel.completedSentLetters.isEmpty {
+            showCompletedSent = true
+        }
+        if !viewmodel.completedInboundLetters.isEmpty {
+            showCompletedInbound = true
         }
     }
 
@@ -415,9 +512,11 @@ extension LettersListView {
     class ViewModel {
         var api: APIClient
         var draftsStore: DraftLetterStoring
+        var inboundOpenStore: InboundLetterOpenStoring
         var letters: [LetterSummary] = []
         var drafts: [LetterDraft] = []
         var inboundLetters: [LetterSummary] = []
+        var searchText = ""
         var isLoadingSent = false
         var isLoadingInbound = false
         var hasLoadedSent = false
@@ -426,14 +525,25 @@ extension LettersListView {
         var inboundLoadFailure: PostalLoadFailure?
         var mailboxesByID: [MailboxID: MailboxSummary] = [:]
         var locationsByCode: [Int: Location] = [:]
+        /// Bumped when local open state may have changed so inbound partitions recompute.
+        private(set) var inboundArchiveTick = 0
 
         private var resolutionTask: Task<Void, Never>?
         private var sentLoadTask: Task<Void, Never>?
         private var inboundLoadTask: Task<Void, Never>?
 
-        init(api: APIClient, draftsStore: DraftLetterStoring = AppServices.letterDrafts) {
+        init(
+            api: APIClient,
+            draftsStore: DraftLetterStoring = AppServices.letterDrafts,
+            inboundOpenStore: InboundLetterOpenStoring = AppServices.inboundLetterOpens
+        ) {
             self.api = api
             self.draftsStore = draftsStore
+            self.inboundOpenStore = inboundOpenStore
+        }
+
+        func refreshInboundArchiveState() {
+            inboundArchiveTick &+= 1
         }
 
         var shouldShowSentLoading: Bool {
@@ -444,6 +554,57 @@ extension LettersListView {
             (isLoadingInbound || !hasLoadedInbound) && inboundLetters.isEmpty && inboundLoadFailure == nil
         }
 
+        private var normalizedSearchQuery: String {
+            searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
+        var hasSentSearchQuery: Bool {
+            !normalizedSearchQuery.isEmpty
+        }
+
+        var hasInboundSearchQuery: Bool {
+            !normalizedSearchQuery.isEmpty
+        }
+
+        var filteredDrafts: [LetterDraft] {
+            filterDrafts(drafts)
+        }
+
+        var activeSentLetters: [LetterSummary] {
+            filterLetters(letters.filter { !$0.status.isTerminal })
+        }
+
+        var completedSentLetters: [LetterSummary] {
+            filterLetters(letters.filter(\.status.isTerminal))
+        }
+
+        var activeInboundLetters: [LetterSummary] {
+            filterLetters(inboundLetters.filter { !isInboundArchived($0) })
+        }
+
+        var completedInboundLetters: [LetterSummary] {
+            filterLetters(inboundLetters.filter(isInboundArchived))
+        }
+
+        /// Terminal inbound mail archives after open, or after the 14-day grace window.
+        func isInboundArchived(_ letter: LetterSummary) -> Bool {
+            _ = inboundArchiveTick
+            guard letter.status.isTerminal else { return false }
+            if inboundOpenStore.hasOpened(letter.shipmentID) { return true }
+            let anchor = letter.updatedAt ?? letter.createdAt ?? .distantPast
+            return anchor < Date().addingTimeInterval(-InboundLetterOpenStore.archiveGraceInterval)
+        }
+
+        var sentSearchHasNoMatches: Bool {
+            filteredDrafts.isEmpty
+                && activeSentLetters.isEmpty
+                && completedSentLetters.isEmpty
+        }
+
+        var inboundSearchHasNoMatches: Bool {
+            activeInboundLetters.isEmpty && completedInboundLetters.isEmpty
+        }
+
         func loadDrafts() {
             drafts = draftsStore.list()
         }
@@ -452,6 +613,15 @@ extension LettersListView {
             for index in offsets {
                 guard drafts.indices.contains(index) else { continue }
                 draftsStore.delete(id: drafts[index].id)
+            }
+            loadDrafts()
+        }
+
+        func deleteFilteredDrafts(at offsets: IndexSet) {
+            let visible = filteredDrafts
+            for index in offsets {
+                guard visible.indices.contains(index) else { continue }
+                draftsStore.delete(id: visible[index].id)
             }
             loadDrafts()
         }
@@ -490,6 +660,7 @@ extension LettersListView {
                     let items = try await api.listInboundLetterSummaries()
                     guard !Task.isCancelled else { return }
                     inboundLetters = items
+                    inboundOpenStore.prune(keeping: Set(items.map(\.shipmentID)))
                     inboundLoadFailure = nil
                     hasLoadedInbound = true
                     scheduleEndpointResolution()
@@ -506,6 +677,44 @@ extension LettersListView {
             let mailbox = endpoint.mailboxID.flatMap { mailboxesByID[$0] }
             let location = endpoint.mailboxID.flatMap { locationsByCode[$0.postOfficeID] }
             return ResolvedLetterEndpoint(endpoint: endpoint, mailbox: mailbox, location: location)
+        }
+
+        private func filterLetters(_ source: [LetterSummary]) -> [LetterSummary] {
+            let query = normalizedSearchQuery
+            guard !query.isEmpty else { return source }
+            return source.filter { letterMatches($0, query: query) }
+        }
+
+        private func filterDrafts(_ source: [LetterDraft]) -> [LetterDraft] {
+            let query = normalizedSearchQuery
+            guard !query.isEmpty else { return source }
+            return source.filter { draftMatches($0, query: query) }
+        }
+
+        private func letterMatches(_ letter: LetterSummary, query: String) -> Bool {
+            let origin = resolved(letter.origin)
+            let destination = resolved(letter.destination)
+            let fields: [String] = [
+                letter.trackingNumber,
+                letter.status.displayTitle,
+                origin.title,
+                origin.detailLine,
+                origin.locationName ?? "",
+                destination.title,
+                destination.detailLine,
+                destination.locationName ?? "",
+            ]
+            return fields.contains { $0.lowercased().contains(query) }
+        }
+
+        private func draftMatches(_ draft: LetterDraft, query: String) -> Bool {
+            let fields: [String] = [
+                draft.destinationTitle,
+                draft.destination?.locationLabel ?? "",
+                draft.formatHint ?? "",
+                "draft",
+            ]
+            return fields.contains { $0.lowercased().contains(query) }
         }
 
         private func scheduleEndpointResolution() {
@@ -598,10 +807,51 @@ extension LettersListView {
 
 #Preview("Inbound") {
     NavigationStack {
-        LettersListView(viewmodel: .preview(inboundLetters: PreviewData.inboundLetters), loadsOnAppear: false)
+        LettersListView(
+            viewmodel: .preview(
+                letters: [],
+                inboundLetters: PreviewData.inboundLetters,
+                // Opened delivered → Completed; recent unopened delivered would stay Active.
+                openedInboundShipmentIDs: ["inbound-delivered"]
+            ),
+            loadsOnAppear: false
+        )
             .navigationDestination(for: ViewRoute.self) { route in
                 Router.view(for: route)
             }
+    }
+    .environment(Router())
+}
+
+#Preview("Inbound Unopened Delivered") {
+    NavigationStack {
+        LettersListView(
+            viewmodel: .preview(
+                letters: [],
+                inboundLetters: PreviewData.inboundLetters,
+                openedInboundShipmentIDs: []
+            ),
+            loadsOnAppear: false
+        )
+        .navigationDestination(for: ViewRoute.self) { route in
+            Router.view(for: route)
+        }
+    }
+    .environment(Router())
+}
+
+#Preview("Completed Only") {
+    NavigationStack {
+        LettersListView(
+            viewmodel: .preview(letters: [
+                PreviewData.letterDelivered,
+                PreviewData.letterFailed,
+            ]),
+            loadsOnAppear: false
+        )
+        .navigationDestination(for: ViewRoute.self) { route in
+            Router.view(for: route)
+        }
     }
     .environment(Router())
 }

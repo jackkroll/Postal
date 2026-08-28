@@ -13,4 +13,6 @@ struct InboundLettersResponse: Codable, Hashable {
 enum AppStorageKeys {
     /// When false, the Inbound tab is hidden on the letters page.
     static let showInboundLetters = "showInboundLetters"
+    /// Shipment IDs for inbound letters the user has opened as recipient.
+    static let openedInboundShipmentIDs = "openedInboundShipmentIDs"
 }

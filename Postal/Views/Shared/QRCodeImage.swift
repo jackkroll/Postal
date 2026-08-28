@@ -7,7 +7,7 @@ enum QRCodeImage {
     /// Renders a QR code for `string` on a background queue. Returns nil if generation fails.
     static func make(from string: String, scale: CGFloat = 12) async -> UIImage? {
         await Task.detached(priority: .userInitiated) {
-            makeSync(from: string, scale: scale)
+            await makeSync(from: string, scale: scale)
         }.value
     }
 

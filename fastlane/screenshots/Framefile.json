@@ -1,0 +1,68 @@
+{
+  "device_frame_colors": [
+    "silver",
+    "spacegray",
+    "gold"
+  ],
+  "default": {
+    "keyword": {
+      "font": "./fonts/SF-Pro-Display-Semibold.otf",
+      "font_size": 120,
+      "color": "#2C2A26"
+    },
+    "title": {
+      "font": "./fonts/SF-Pro-Display-Semibold.otf",
+      "font_size":72,
+      "color": "#5C574F"
+    },
+    "background": "./backgrounds/bg_02_track.png",
+    "padding": 36,
+    "title_min_height": "25%",
+    "interline_spacing": 8,
+    "title_below_image": false,
+    "show_complete_frame": false,
+    "stack_title": true
+  },
+  "data": [
+    {
+      "filter": "01_Tracking",
+      "background": "./backgrounds/bg_02_track.png",
+      "keyword": {
+        "color": "#F5F8FA"
+      },
+      "title": {
+        "color": "#C5D8E0"
+      }
+    },
+    {
+      "filter": "02_AddressBook",
+      "background": "./backgrounds/bg_04_invite.png",
+      "keyword": {
+        "color": "#2C2A26"
+      },
+      "title": {
+        "color": "#4F5A4C"
+      }
+    },
+    {
+      "filter": "03_Compose",
+      "background": "./backgrounds/bg_03_compose.png",
+      "keyword": {
+        "color": "#2C2A26"
+      },
+      "title": {
+        "color": "#5C574F"
+      }
+    },
+    {
+      "filter": "04_TimeCapsule",
+      "background": "./backgrounds/bg_05_capsule.png",
+      "keyword": {
+        "color": "#2C2A26"
+      },
+      "title": {
+        "color": "#5A5A68"
+      }
+    }
+  ]
+}

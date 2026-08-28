@@ -15,15 +15,31 @@
 		56E8F1A2302A100100C0DE03 /* CodeScanner in Frameworks */ = {isa = PBXBuildFile; productRef = 56E8F1A1302A100100C0DE02 /* CodeScanner */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		56F1A0072FF44C2B00D330D8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 56DB1E932FF44C2B00D330D8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 56DB1E9A2FF44C2B00D330D8;
+			remoteInfo = Postal;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		5637938D3016BDB700B90A9C /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		56DB1E9B2FF44C2B00D330D8 /* Postal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Postal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		56F1A0012FF44C2B00D330D8 /* PostalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PostalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		56DB1E9D2FF44C2B00D330D8 /* Postal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Postal;
+			sourceTree = "<group>";
+		};
+		56F1A0022FF44C2B00D330D8 /* PostalUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PostalUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -42,6 +58,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		56F1A0042FF44C2B00D330D8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -57,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				56DB1E9D2FF44C2B00D330D8 /* Postal */,
+				56F1A0022FF44C2B00D330D8 /* PostalUITests */,
 				56C00CFC2FFFF3A7009FA92D /* Frameworks */,
 				56DB1E9C2FF44C2B00D330D8 /* Products */,
 			);
@@ -66,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				56DB1E9B2FF44C2B00D330D8 /* Postal.app */,
+				56F1A0012FF44C2B00D330D8 /* PostalUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -80,6 +105,7 @@
 				56DB1E972FF44C2B00D330D8 /* Sources */,
 				56DB1E982FF44C2B00D330D8 /* Frameworks */,
 				56DB1E992FF44C2B00D330D8 /* Resources */,
+				56SC00012FF44C2B00D330D8 /* Copy Screenshot Fixtures (Debug only) */,
 			);
 			buildRules = (
 			);
@@ -100,6 +126,29 @@
 			productReference = 56DB1E9B2FF44C2B00D330D8 /* Postal.app */;
 			productType = "com.apple.product-type.application";
 		};
+		56F1A0062FF44C2B00D330D8 /* PostalUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 56F1A00B2FF44C2B00D330D8 /* Build configuration list for PBXNativeTarget "PostalUITests" */;
+			buildPhases = (
+				56F1A0032FF44C2B00D330D8 /* Sources */,
+				56F1A0042FF44C2B00D330D8 /* Frameworks */,
+				56F1A0052FF44C2B00D330D8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				56F1A0082FF44C2B00D330D8 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				56F1A0022FF44C2B00D330D8 /* PostalUITests */,
+			);
+			name = PostalUITests;
+			packageProductDependencies = (
+			);
+			productName = PostalUITests;
+			productReference = 56F1A0012FF44C2B00D330D8 /* PostalUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -112,6 +161,10 @@
 				TargetAttributes = {
 					56DB1E9A2FF44C2B00D330D8 = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					56F1A0062FF44C2B00D330D8 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 56DB1E9A2FF44C2B00D330D8;
 					};
 				};
 			};
@@ -135,6 +188,7 @@
 			projectRoot = "";
 			targets = (
 				56DB1E9A2FF44C2B00D330D8 /* Postal */,
+				56F1A0062FF44C2B00D330D8 /* PostalUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -147,7 +201,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		56F1A0052FF44C2B00D330D8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		56SC00012FF44C2B00D330D8 /* Copy Screenshot Fixtures */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/ScreenshotFixtures/compose-letter.pkdrawing",
+			);
+			name = "Copy Screenshot Fixtures";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/compose-letter.pkdrawing",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "FIXTURE=\"${SRCROOT}/ScreenshotFixtures/compose-letter.pkdrawing\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/compose-letter.pkdrawing\"\n\nif [ -f \"${FIXTURE}\" ]; then\n  mkdir -p \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n  cp \"${FIXTURE}\" \"${DEST}\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		56DB1E972FF44C2B00D330D8 /* Sources */ = {
@@ -157,7 +238,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		56F1A0032FF44C2B00D330D8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		56F1A0082FF44C2B00D330D8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 56DB1E9A2FF44C2B00D330D8 /* Postal */;
+			targetProxy = 56F1A0072FF44C2B00D330D8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		56DB1EA62FF44C2C00D330D8 /* Debug */ = {
@@ -351,6 +447,44 @@
 			};
 			name = Release;
 		};
+		56F1A0092FF44C2B00D330D8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZS9H682SJQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JackKroll.PostalUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Postal;
+			};
+			name = Debug;
+		};
+		56F1A00A2FF44C2B00D330D8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZS9H682SJQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JackKroll.PostalUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Postal;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -368,6 +502,15 @@
 			buildConfigurations = (
 				56DB1EA92FF44C2C00D330D8 /* Debug */,
 				56DB1EAA2FF44C2C00D330D8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		56F1A00B2FF44C2B00D330D8 /* Build configuration list for PBXNativeTarget "PostalUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				56F1A0092FF44C2B00D330D8 /* Debug */,
+				56F1A00A2FF44C2B00D330D8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

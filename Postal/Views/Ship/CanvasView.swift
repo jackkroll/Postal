@@ -7,6 +7,9 @@
 
 import SwiftUI
 import PencilKit
+#if DEBUG
+import UniformTypeIdentifiers
+#endif
 
 struct CanvasView: View {
     let initialDrawingData: Data?
@@ -24,6 +27,15 @@ struct CanvasView: View {
     @State private var drawingByteCount = 0
     @State private var changeNotifyTask: Task<Void, Never>?
     @State private var zoomResetToken = 0
+    @State private var focusDrawingToken = 0
+    #if DEBUG
+    @State private var isPKDrawingExportPresented = false
+    @State private var pkDrawingExportDocument = PKDrawingExportDocument(data: Data())
+
+    private var showsDeveloperExport: Bool {
+        !ScreenshotMode.hidesDeveloperUI
+    }
+    #endif
 
     init(
         initialDrawingData: Data? = nil,
@@ -51,6 +63,7 @@ struct CanvasView: View {
                 toolPicker: $toolPicker,
                 isDrawingEmpty: $isDrawingEmpty,
                 zoomResetToken: zoomResetToken,
+                focusDrawingToken: focusDrawingToken,
                 onDrawingChange: scheduleDrawingChangeNotification
             )
             .ignoresSafeArea(.all)
@@ -90,6 +103,26 @@ struct CanvasView: View {
                     Label(isToolPickerVisible ? "Hide Tools" : "Show Tools", systemImage: isToolPickerVisible ? "pencil.slash" : "pencil")
                 }
             }
+            #if DEBUG
+            if showsDeveloperExport {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            notifyDrawingChange(immediate: true)
+                            pkDrawingExportDocument = PKDrawingExportDocument(
+                                data: canvas.drawing.dataRepresentation()
+                            )
+                            isPKDrawingExportPresented = true
+                        } label: {
+                            Label("Export PK Drawing", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(isDrawingEmpty)
+                    } label: {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+            #endif
             ToolbarItem(placement: .bottomBar) {
                 Button {
                     changeNotifyTask?.cancel()
@@ -131,6 +164,20 @@ struct CanvasView: View {
                 notifyDrawingChange(immediate: true)
             }
         }
+        #if DEBUG
+        .fileExporter(
+            isPresented: Binding(
+                get: { showsDeveloperExport && isPKDrawingExportPresented },
+                set: { newValue in
+                    guard showsDeveloperExport else { return }
+                    isPKDrawingExportPresented = newValue
+                }
+            ),
+            document: pkDrawingExportDocument,
+            contentType: .pkDrawing,
+            defaultFilename: "letter"
+        ) { _ in }
+        #endif
     }
 
     private func restoreInitialDrawingIfNeeded() {
@@ -142,6 +189,7 @@ struct CanvasView: View {
         canvas.drawing = drawing
         isDrawingEmpty = drawing.strokes.isEmpty
         drawingByteCount = initialDrawingData.count
+        focusDrawingToken += 1
     }
 
     private func scheduleDrawingChangeNotification() {
@@ -168,6 +216,7 @@ struct CanvasUIView: UIViewRepresentable {
     @Binding var toolPicker: PKToolPicker
     @Binding var isDrawingEmpty: Bool
     let zoomResetToken: Int
+    let focusDrawingToken: Int
     var onDrawingChange: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -202,12 +251,27 @@ struct CanvasUIView: UIViewRepresentable {
             context.coordinator.lastZoomResetToken = zoomResetToken
             uiView.resetView(animated: true)
         }
+        if context.coordinator.lastFocusDrawingToken != focusDrawingToken {
+            context.coordinator.lastFocusDrawingToken = focusDrawingToken
+            uiView.syncCanvasExtent(for: canvasView.drawing)
+            let drawing = canvasView.drawing
+            DispatchQueue.main.async {
+                uiView.focusOnDrawing(drawing, animated: false)
+            }
+            if uiView.traitCollection.userInterfaceIdiom == .phone {
+                // Tool picker layout on iPhone can settle after the first pass.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    uiView.focusOnDrawing(drawing, animated: false)
+                }
+            }
+        }
     }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         var isDrawingEmpty: Binding<Bool>
         var onDrawingChange: () -> Void
         var lastZoomResetToken: Int = 0
+        var lastFocusDrawingToken: Int = 0
         weak var containerView: CanvasContainerView?
 
         init(isDrawingEmpty: Binding<Bool>, onDrawingChange: @escaping () -> Void) {
@@ -254,6 +318,8 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
     private let verticalGrowthPadding: CGFloat = 420
     private let verticalGrowthStep: CGFloat = 200
     private var contentDrivenCanvasHeight: CGFloat = 0
+    private var suppressAutoCentering = false
+    private var pendingFocusDrawing: PKDrawing?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -284,6 +350,11 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
         super.layoutSubviews()
         updateCanvasSize()
         centerCanvasIfNeeded()
+        if let drawing = pendingFocusDrawing,
+           scrollView.bounds.width > 0,
+           scrollView.bounds.height > 0 {
+            focusOnDrawing(drawing, animated: false)
+        }
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {
@@ -365,6 +436,8 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
     }
 
     private func centerCanvasIfNeeded() {
+        guard !suppressAutoCentering else { return }
+
         let boundsSize = scrollView.bounds.size
         let contentSize = scrollView.contentSize
 
@@ -379,9 +452,92 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
     }
 
     func resetView(animated: Bool) {
+        suppressAutoCentering = false
         // Animate zoom back to default only (no recentering).
         scrollView.setZoomScale(1, animated: animated)
         scrollView.layoutIfNeeded()
+    }
+
+    /// Non-safe-area UI chrome that reduces the unobscured drawing area.
+    private var focusFramingChromeInsets: UIEdgeInsets {
+        switch traitCollection.userInterfaceIdiom {
+        case .pad:
+            return UIEdgeInsets(top: 12, left: 0, bottom: 96, right: 0)
+        default:
+            // iPhone PencilKit tool picker + bottom toolbar cover most of the lower edge.
+            return UIEdgeInsets(top: 12, left: 20, bottom: 300, right: 20)
+        }
+    }
+
+    /// Safe area plus surrounding chrome for framing restored drawings.
+    private var focusFramingInsets: UIEdgeInsets {
+        let chrome = focusFramingChromeInsets
+        return UIEdgeInsets(
+            top: safeAreaInsets.top + chrome.top,
+            left: safeAreaInsets.left + chrome.left,
+            bottom: safeAreaInsets.bottom + chrome.bottom,
+            right: safeAreaInsets.right + chrome.right
+        )
+    }
+
+    /// Scrolls so restored or imported drawing content is comfortably in view.
+    func focusOnDrawing(_ drawing: PKDrawing, animated: Bool) {
+        guard !drawing.strokes.isEmpty else { return }
+
+        guard scrollView.bounds.width > 0, scrollView.bounds.height > 0 else {
+            pendingFocusDrawing = drawing
+            return
+        }
+        pendingFocusDrawing = nil
+
+        layoutIfNeeded()
+        suppressAutoCentering = true
+
+        let target = drawing.bounds.insetBy(dx: -48, dy: -48)
+        guard target.width > 0, target.height > 0 else { return }
+
+        let framing = focusFramingInsets
+        let visibleWidth = scrollView.bounds.width - framing.left - framing.right
+        let visibleHeight = scrollView.bounds.height - framing.top - framing.bottom
+        guard visibleWidth > 0, visibleHeight > 0 else {
+            pendingFocusDrawing = drawing
+            return
+        }
+
+        let clampedScale: CGFloat
+        let offsetX: CGFloat
+        let offsetY: CGFloat
+
+        if traitCollection.userInterfaceIdiom == .phone {
+            // Anchor from the top — letters are written downward and the tool picker
+            // eats the bottom. Vertical centering scrolls the top out of view on iPhone.
+            let widthScale = visibleWidth / target.width
+            let heightScale = visibleHeight / target.height
+            let scale = min(widthScale, heightScale, 1) * 0.96
+            clampedScale = max(scale, scrollView.minimumZoomScale)
+            offsetX = target.minX * clampedScale - framing.left
+            offsetY = target.minY * clampedScale - framing.top
+        } else {
+            let widthScale = visibleWidth / target.width
+            let heightScale = visibleHeight / target.height
+            let scale = min(widthScale, heightScale, 1) * 0.93
+            clampedScale = max(scale, scrollView.minimumZoomScale)
+            offsetX = target.midX * clampedScale - framing.left - visibleWidth / 2
+            offsetY = target.midY * clampedScale - framing.top - visibleHeight / 2
+        }
+
+        scrollView.contentInset = framing
+        scrollView.setZoomScale(clampedScale, animated: false)
+        scrollView.layoutIfNeeded()
+
+        let minX = -scrollView.contentInset.left
+        let minY = -scrollView.contentInset.top
+        let maxX = max(scrollView.contentSize.width - scrollView.bounds.width + scrollView.contentInset.right, minX)
+        let maxY = max(scrollView.contentSize.height - scrollView.bounds.height + scrollView.contentInset.bottom, minY)
+        scrollView.contentOffset = CGPoint(
+            x: min(max(offsetX, minX), maxX),
+            y: min(max(offsetY, minY), maxY)
+        )
     }
 
     private static func roundUp(_ value: CGFloat, step: CGFloat) -> CGFloat {
@@ -400,6 +556,35 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
         ])
     }
 }
+
+#if DEBUG
+private struct PKDrawingExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.pkDrawing] }
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private extension UTType {
+    static let pkDrawing = UTType(
+        exportedAs: "com.apple.pencilkit.drawing",
+        conformingTo: .data
+    )
+}
+#endif
 
 #Preview {
     NavigationStack {

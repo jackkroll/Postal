@@ -1,0 +1,46 @@
+# frozen_string_literal: true
+
+default_platform(:ios)
+
+PROJECT_ROOT = File.expand_path("..", __dir__)
+XCODEPROJ = File.join(PROJECT_ROOT, "Postal.xcodeproj")
+SCREENSHOTS_DIR = File.join(PROJECT_ROOT, "fastlane", "screenshots")
+
+def restore_frameit_assets
+  Dir.chdir(File.join(PROJECT_ROOT, "fastlane")) do
+    sh("mkdir -p screenshots/backgrounds screenshots/fonts")
+    sh("cp -R frameit_assets/backgrounds/. screenshots/backgrounds/")
+    sh("cp -R frameit_assets/fonts/. screenshots/fonts/")
+  end
+end
+
+platform :ios do
+  desc "Capture raw device screenshots via Snapshot"
+  lane :screenshots do
+    capture_screenshots(
+      project: XCODEPROJ,
+      scheme: "Postal",
+      configuration: "Release",
+      output_directory: SCREENSHOTS_DIR,
+      clear_previous_screenshots: true,
+      stop_after_first_error: true
+    )
+    restore_frameit_assets
+  end
+
+  desc "Frame screenshots with titles and gradient backgrounds"
+  lane :frames do
+    restore_frameit_assets
+    # Let Frameit pick frames from screenshot size (iPhone 16 Pro + iPad 11").
+    frame_screenshots(
+      path: SCREENSHOTS_DIR,
+      white: true
+    )
+  end
+
+  desc "Capture then frame App Store screenshots"
+  lane :screenshots_framed do
+    screenshots
+    frames
+  end
+end

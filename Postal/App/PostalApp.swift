@@ -13,6 +13,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
     FirebaseApp.configure()
+    if ScreenshotMode.isEnabled {
+      // Skip RevenueCat + push during Fastlane Snapshot — fixtures only.
+      UIView.setAnimationsEnabled(false)
+      return true
+    }
     configurePurchases()
     // Kick off APNs early when permission is already granted so Settings
     // does not have to wait on a cold registration.
@@ -87,10 +92,14 @@ struct PostalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            if ScreenshotMode.isEnabled {
+                ScreenshotRootView(screen: ScreenshotMode.screen)
+            } else {
+                RootView()
+            }
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
+            guard phase == .active, !ScreenshotMode.isEnabled else { return }
             Task { @MainActor in
                 await AppServices.pushNotifications.clearAppIconBadge()
                 await AppServices.pushNotifications.registerIfAuthorized()
