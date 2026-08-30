@@ -71,9 +71,12 @@ struct LetterLimits: Equatable, Sendable {
         return Double(byteCount) / Double(ceiling)
     }
 
-    /// Progress shown in the composer meter (stamp bucket for Free, size ceiling for Plus).
+    /// Progress shown in the composer meter.
+    ///
+    /// Free (under the hard cap): stamp-bucket fill so each stamp allotment reads as 0…100%.
+    /// Free (over the hard cap) and Plus: share of the plan size ceiling.
     func meterFraction(byteCount: Int, for kind: LetterComposeKind) -> Double {
-        if usesStampMeter {
+        if usesStampMeter, !exceedsLimit(byteCount, for: kind) {
             return stampPricing.fillFraction(byteSize: byteCount, kind: kind)
         }
         return usageFraction(byteCount, for: kind)

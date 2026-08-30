@@ -20,7 +20,7 @@ extension JSONDecoder {
     }
 }
 
-private extension Date {
+extension Date {
     private static let iso8601WithFractionalSeconds = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
     private static let iso8601 = Date.ISO8601FormatStyle()
 

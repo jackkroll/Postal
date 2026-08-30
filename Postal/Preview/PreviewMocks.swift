@@ -5,6 +5,7 @@ final class PreviewLetterContentService: LetterContentProviding {
     var contentByShipmentID: [String: LetterContent] = [
         PreviewData.deliveredTrackingNumber: .text(PreviewData.sampleLetterText, mimeType: "text/plain"),
         PreviewData.inTransitTrackingNumber: .text(PreviewData.sampleLetterText, mimeType: "text/plain"),
+        "inbound-delivered": .text(PreviewData.sampleLetterText, mimeType: "text/plain"),
     ]
 
     func fetchLetter(shipmentID: String, expectedFormat: LetterFormat?) async throws -> LetterContent {
@@ -136,6 +137,7 @@ extension TrackingView.ViewModel {
         trackingInfo: TrackingInfo? = nil,
         letterSummary: LetterSummary? = nil,
         isRecipient: Bool = false,
+        openedInboundShipmentIDs: Set<String> = [],
         errorMessage: String? = nil,
         isLoading: Bool = false
     ) -> TrackingView.ViewModel {
@@ -144,7 +146,7 @@ extension TrackingView.ViewModel {
             letterService: PreviewLetterContentService(),
             letterSummary: letterSummary,
             isRecipient: isRecipient,
-            inboundOpenStore: PreviewInboundLetterOpenStore(),
+            inboundOpenStore: PreviewInboundLetterOpenStore(openedIDs: openedInboundShipmentIDs),
             autoLookup: false
         )
         viewModel.trackingNumber = trackingNumber
@@ -260,31 +262,38 @@ extension ClaimMailboxView.ViewModel {
 
 extension SettingsView.ViewModel {
     static func preview(
+        userEntitlements: UserEntitlements = .previewFree,
         authorizationStatus: UNAuthorizationStatus = .notDetermined,
         registeredSummary: DeviceTokenSummary? = nil,
         errorMessage: String? = nil,
         isRegistering: Bool = false,
-        sentMode: SentNotificationMode = .destinationOnly,
-        inboundMode: InboundNotificationMode = .arrivalOnly
+        isDisabling: Bool = false,
+        isClaimingAllowance: Bool = false,
+        sentMode: SentNotificationMode? = nil,
+        inboundMode: InboundNotificationMode? = nil,
+        allowedSentModes: [SentNotificationMode]? = nil,
+        allowedInboundModes: [InboundNotificationMode]? = nil
     ) -> SettingsView.ViewModel {
         let push = PreviewPushNotificationService(authorizationStatus: authorizationStatus)
-        let entitlements = PreviewEntitlementsService()
-        entitlements.entitlements = .previewFree
+        let entitlementsService = PreviewEntitlementsService()
+        entitlementsService.entitlements = userEntitlements
         let viewModel = SettingsView.ViewModel(
             api: APIClient(),
             auth: PreviewAuthService(),
             push: push,
-            entitlementsService: entitlements
+            entitlementsService: entitlementsService
         )
         viewModel.authorizationStatus = authorizationStatus
         viewModel.registeredSummary = registeredSummary
         viewModel.errorMessage = errorMessage
         viewModel.isRegistering = isRegistering
+        viewModel.isDisabling = isDisabling
+        viewModel.isClaimingAllowance = isClaimingAllowance
         viewModel.showSuccess = registeredSummary != nil
-        viewModel.sentMode = sentMode
-        viewModel.inboundMode = inboundMode
-        viewModel.allowedSentModes = [.destinationOnly]
-        viewModel.allowedInboundModes = [.arrivalOnly]
+        viewModel.sentMode = sentMode ?? userEntitlements.notification.allowedSentModes.first ?? .destinationOnly
+        viewModel.inboundMode = inboundMode ?? userEntitlements.notification.allowedInboundModes.first ?? .arrivalOnly
+        viewModel.allowedSentModes = allowedSentModes ?? userEntitlements.notification.allowedSentModes
+        viewModel.allowedInboundModes = allowedInboundModes ?? userEntitlements.notification.allowedInboundModes
         return viewModel
     }
 }
@@ -392,6 +401,46 @@ final class PreviewPendingTimeCapsuleStore: PendingTimeCapsuleStoring {
 }
 
 extension UserEntitlements {
+    static let previewPlus = UserEntitlements(
+        isSubscriber: true,
+        expiresAt: "2025-12-31T00:00:00Z",
+        stampBalance: 42,
+        stampPricing: .default,
+        unlimitedSends: true,
+        mailboxLimit: 5,
+        ownedMailboxes: 2,
+        letter: LetterLimitBlock(
+            textMaxBytes: 12_288,
+            drawingMaxBytes: 61_440,
+            subscriber: LetterSizeCaps(textMaxBytes: 12_288, drawingMaxBytes: 61_440)
+        ),
+        allowance: StampAllowanceInfo(
+            amount: 5,
+            intervalSeconds: 604_800,
+            claimable: false,
+            lastClaimedAt: nil,
+            nextClaimAt: nil,
+            availableWhileSubscribed: false
+        ),
+        notification: NotificationEntitlements(
+            allowedSent: SentNotificationMode.allCases.map(\.rawValue),
+            allowedInbound: InboundNotificationMode.allCases.map(\.rawValue),
+            defaultSent: SentNotificationMode.shipmentDetails.rawValue,
+            defaultInbound: InboundNotificationMode.shipmentDetails.rawValue
+        )
+    )
+}
+
+extension DeviceTokenSummary {
+    static let preview = DeviceTokenSummary(
+        token: "preview-device-token",
+        platform: "ios",
+        appInstanceID: "preview-app-instance",
+        updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+    )
+}
+
+extension UserEntitlements {
     static let previewFreeAllowanceClaimed = UserEntitlements(
         isSubscriber: false,
         expiresAt: nil,
@@ -410,7 +459,7 @@ extension UserEntitlements {
             intervalSeconds: 604_800,
             claimable: false,
             lastClaimedAt: "2024-07-01T12:00:00Z",
-            nextClaimAt: "2024-07-08T12:00:00Z",
+            nextClaimAt: "2024-07-05T12:00:00Z",
             availableWhileSubscribed: false
         ),
         notification: NotificationEntitlements(

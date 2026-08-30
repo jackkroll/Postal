@@ -15,7 +15,7 @@
       "font_size":72,
       "color": "#5C574F"
     },
-    "background": "./backgrounds/bg_02_track.png",
+    "background": "./backgrounds/bg_02.png",
     "padding": 36,
     "title_min_height": "25%",
     "interline_spacing": 8,
@@ -26,17 +26,17 @@
   "data": [
     {
       "filter": "01_Tracking",
-      "background": "./backgrounds/bg_02_track.png",
+      "background": "./backgrounds/bg_02.png",
       "keyword": {
-        "color": "#F5F8FA"
+        "color": "#2C2A26"
       },
       "title": {
-        "color": "#C5D8E0"
+        "color": "#4F5A4C"
       }
     },
     {
       "filter": "02_AddressBook",
-      "background": "./backgrounds/bg_04_invite.png",
+      "background": "./backgrounds/bg_04.png",
       "keyword": {
         "color": "#2C2A26"
       },
@@ -46,7 +46,7 @@
     },
     {
       "filter": "03_Compose",
-      "background": "./backgrounds/bg_03_compose.png",
+      "background": "./backgrounds/bg_03.png",
       "keyword": {
         "color": "#2C2A26"
       },
@@ -56,7 +56,7 @@
     },
     {
       "filter": "04_TimeCapsule",
-      "background": "./backgrounds/bg_05_capsule.png",
+      "background": "./backgrounds/bg_01.png",
       "keyword": {
         "color": "#2C2A26"
       },

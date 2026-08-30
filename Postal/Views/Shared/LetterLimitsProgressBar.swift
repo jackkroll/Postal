@@ -59,6 +59,15 @@ struct LetterLimitsProgressBar: View {
     .padding()
 }
 
+#Preview("Free over hard cap") {
+    LetterLimitsProgressBar(
+        byteCount: 10_000,
+        kind: .text,
+        limits: .preview
+    )
+    .padding()
+}
+
 #Preview("Plus size") {
     LetterLimitsProgressBar(
         byteCount: 8_000,

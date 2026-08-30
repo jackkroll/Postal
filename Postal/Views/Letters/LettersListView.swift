@@ -193,9 +193,13 @@ struct LettersListView: View {
                            viewmodel.completedSentLetters.isEmpty,
                            viewmodel.sentLoadFailure == nil,
                            !viewmodel.hasSentSearchQuery {
-                            Text("No sent letters yet.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                            ContentUnavailableView("No letters sent yet", systemImage: "tray.and.arrow.up.fill")
+                        }
+                        if viewmodel.activeSentLetters.isEmpty,
+                           !viewmodel.completedSentLetters.isEmpty,
+                           viewmodel.sentLoadFailure == nil,
+                           !viewmodel.hasSentSearchQuery {
+                            ContentUnavailableView("No letters currently being sent", systemImage: "tray.and.arrow.up.fill")
                         }
                     }
 
@@ -271,6 +275,15 @@ struct LettersListView: View {
                             origin: viewmodel.resolved(letter.origin),
                             destination: viewmodel.resolved(letter.destination)
                         )
+                    }
+                }
+                if viewmodel.activeInboundLetters.isEmpty,
+                   !viewmodel.hasInboundSearchQuery,
+                   !viewmodel.completedInboundLetters.isEmpty {
+                    ContentUnavailableView {
+                        Label("No new inbound letters", systemImage: "tray")
+                    } description: {
+                        Text("Previous messages are under the \"Arrived\" section")
                     }
                 }
 
@@ -589,10 +602,7 @@ extension LettersListView {
         /// Terminal inbound mail archives after open, or after the 14-day grace window.
         func isInboundArchived(_ letter: LetterSummary) -> Bool {
             _ = inboundArchiveTick
-            guard letter.status.isTerminal else { return false }
-            if inboundOpenStore.hasOpened(letter.shipmentID) { return true }
-            let anchor = letter.updatedAt ?? letter.createdAt ?? .distantPast
-            return anchor < Date().addingTimeInterval(-InboundLetterOpenStore.archiveGraceInterval)
+            return InboundLetterOpenStore.isArchived(letter, openStore: inboundOpenStore)
         }
 
         var sentSearchHasNoMatches: Bool {
@@ -847,6 +857,23 @@ extension LettersListView {
                 PreviewData.letterDelivered,
                 PreviewData.letterFailed,
             ]),
+            loadsOnAppear: false
+        )
+        .navigationDestination(for: ViewRoute.self) { route in
+            Router.view(for: route)
+        }
+    }
+    .environment(Router())
+}
+
+#Preview("Inbound Archived Only") {
+    NavigationStack {
+        LettersListView(
+            viewmodel: .preview(
+                letters: [],
+                inboundLetters: [PreviewData.inboundLetters[1]],
+                openedInboundShipmentIDs: ["inbound-delivered"]
+            ),
             loadsOnAppear: false
         )
         .navigationDestination(for: ViewRoute.self) { route in

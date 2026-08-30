@@ -1,5 +1,6 @@
 # Dedicated renamed simulators (avoids duplicate device-name collisions).
-# iPhone 16 Pro @ iOS 26.0 and iPad Pro 11-inch (M5) @ iOS 26.0
+# iPhone 16 Pro Max (6.9") @ iOS 26.0 and iPad Pro 13-inch (M5) @ iOS 26.0
+# Run `fastlane ios setup_screenshot_simulators` to create or refresh them.
 devices([
   "Postal Screenshots iPhone",
   "Postal Screenshots iPad"

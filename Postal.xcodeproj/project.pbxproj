@@ -105,7 +105,7 @@
 				56DB1E972FF44C2B00D330D8 /* Sources */,
 				56DB1E982FF44C2B00D330D8 /* Frameworks */,
 				56DB1E992FF44C2B00D330D8 /* Resources */,
-				56SC00012FF44C2B00D330D8 /* Copy Screenshot Fixtures (Debug only) */,
+				56SC00012FF44C2B00D330D8 /* Copy Screenshot Fixtures */,
 			);
 			buildRules = (
 			);

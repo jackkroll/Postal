@@ -15,6 +15,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 ## iOS
 
+### ios setup_screenshot_simulators
+
+```sh
+[bundle exec] fastlane ios setup_screenshot_simulators
+```
+
+Create or refresh dedicated 6.9" iPhone and 13" iPad screenshot simulators
+
 ### ios screenshots
 
 ```sh

@@ -15,6 +15,11 @@ def restore_frameit_assets
 end
 
 platform :ios do
+  desc "Create or refresh dedicated 6.9\" iPhone and 13\" iPad screenshot simulators"
+  lane :setup_screenshot_simulators do
+    sh("bash", File.join(__dir__, "setup_screenshot_simulators.sh"))
+  end
+
   desc "Capture raw device screenshots via Snapshot"
   lane :screenshots do
     capture_screenshots(
@@ -31,7 +36,7 @@ platform :ios do
   desc "Frame screenshots with titles and gradient backgrounds"
   lane :frames do
     restore_frameit_assets
-    # Let Frameit pick frames from screenshot size (iPhone 16 Pro + iPad 11").
+    # Let Frameit pick frames from screenshot size (iPhone 6.9" + iPad 13").
     frame_screenshots(
       path: SCREENSHOTS_DIR,
       white: true

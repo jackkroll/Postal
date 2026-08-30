@@ -328,8 +328,6 @@ struct SavedAddressesEmptyContent: View {
                     ? "Add a nickname and mailbox, then choose it as the destination."
                     : "Add a nickname and mailbox so you can send letters faster."
             )
-        } actions: {
-            Button("Add Address", action: onAdd)
         }
     }
 }
@@ -584,34 +582,37 @@ struct OwnedMailboxActionsRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             NavigationLink(value: ViewRoute.ship(origin: mailbox)) {
-                OwnedMailboxRowView(mailbox: mailbox)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer()
-                
-                Button {
-                    onSettings()
-                } label: {
-                    Image(systemName: "gearshape")
+                AdaptiveStack {
+                    OwnedMailboxRowView(mailbox: mailbox)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer()
+                    HStack {
+                        Button {
+                            onSettings()
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .buttonBorderShape(.circle)
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Settings")
+                        
+                        Button {
+                            onShowQR()
+                        } label: {
+                            Image(systemName: "qrcode")
+                        }
+                        .buttonBorderShape(.circle)
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Show QR Code")
+                        
+                        ShareLink(item: shareURL) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .buttonBorderShape(.circle)
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Share")
+                    }
                 }
-                .buttonBorderShape(.circle)
-                .buttonStyle(.bordered)
-                .accessibilityLabel("Settings")
-                
-                Button {
-                    onShowQR()
-                } label: {
-                    Image(systemName: "qrcode")
-                }
-                .buttonBorderShape(.circle)
-                .buttonStyle(.bordered)
-                .accessibilityLabel("Show QR Code")
-                
-                ShareLink(item: shareURL) {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .buttonBorderShape(.circle)
-                .buttonStyle(.bordered)
-                .accessibilityLabel("Share")
             }
             
         }

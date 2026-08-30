@@ -148,7 +148,14 @@ enum PromoText {
     // MARK: Next claim
 
     static func nextFreeStampClaim(at timestamp: String) -> String {
-        "Next free stamp claim: \(timestamp)"
+        guard let date = Date.parseAPITimestamp(timestamp) else {
+            return "Next free stamp claim: \(timestamp)"
+        }
+        if date <= Date() {
+            return "Next free stamps available now"
+        }
+        let relative = date.formatted(.relative(presentation: .named, unitsStyle: .wide))
+        return "Next free stamp claim \(relative)"
     }
 
     // MARK: Onboarding

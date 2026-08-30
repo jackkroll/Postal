@@ -56,4 +56,12 @@ final class InboundLetterOpenStore: InboundLetterOpenStoring {
         let stored = defaults.stringArray(forKey: key) ?? []
         return Set(stored)
     }
+
+    /// Terminal inbound mail archives after open, or after the grace window.
+    static func isArchived(_ letter: LetterSummary, openStore: InboundLetterOpenStoring) -> Bool {
+        guard letter.status.isTerminal else { return false }
+        if openStore.hasOpened(letter.shipmentID) { return true }
+        let anchor = letter.updatedAt ?? letter.createdAt ?? .distantPast
+        return anchor < Date().addingTimeInterval(-archiveGraceInterval)
+    }
 }

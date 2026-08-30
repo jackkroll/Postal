@@ -18,7 +18,9 @@ struct TrackingView: View {
                 .animation(.easeInOut, value: presentation.title)
             }
             Form {
-                if viewmodel.isRecipient, let letterLink = viewmodel.letterReadingLink {
+                if viewmodel.showsInboundLetterPreview, let letterLink = viewmodel.letterReadingLink {
+                    letterPreviewSection(letterLink)
+                } else if viewmodel.showsInboundLetterNavigation, let letterLink = viewmodel.letterReadingLink {
                     viewLetterSection(letterLink, prominent: true)
                 }
 
@@ -137,6 +139,22 @@ struct TrackingView: View {
             } message: {
                 Text("Tracking link copied to clipboard.")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func letterPreviewSection(
+        _ link: (shipmentID: String, metadata: LetterMetadata)
+    ) -> some View {
+        Section("Letter") {
+            LetterReaderSection(
+                shipmentID: link.shipmentID,
+                letterMetadata: link.metadata,
+                letterService: viewmodel.letterService
+            )
+            .frame(maxHeight: 280)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
         }
     }
 
@@ -326,6 +344,8 @@ extension TrackingView {
         var letterSummary: LetterSummary?
         var isRecipient: Bool
         var inboundOpenStore: InboundLetterOpenStoring
+        /// Frozen at init so marking open in `.task` does not swap nav → preview on first visit.
+        private let showsInboundLetterPreviewOnAppear: Bool
         var trackingInfo: TrackingInfo?
         var trackingRoute: TrackingRoute?
         var locationsByCode: [Int: Location] = [:]
@@ -348,6 +368,14 @@ extension TrackingView {
         var letterReadingLink: (shipmentID: String, metadata: LetterMetadata)? {
             guard let shipmentID, let letterMetadata else { return nil }
             return (shipmentID, letterMetadata)
+        }
+
+        var showsInboundLetterPreview: Bool {
+            showsInboundLetterPreviewOnAppear && letterReadingLink != nil
+        }
+
+        var showsInboundLetterNavigation: Bool {
+            isRecipient && !showsInboundLetterPreviewOnAppear && letterReadingLink != nil
         }
 
         /// Prefer live public-track ETA; fall back to shipment-backed letter summary.
@@ -407,6 +435,14 @@ extension TrackingView {
             self.letterSummary = letterSummary
             self.isRecipient = isRecipient
             self.inboundOpenStore = inboundOpenStore
+            if isRecipient, let letterSummary {
+                showsInboundLetterPreviewOnAppear = InboundLetterOpenStore.isArchived(
+                    letterSummary,
+                    openStore: inboundOpenStore
+                )
+            } else {
+                showsInboundLetterPreviewOnAppear = false
+            }
             if let trackingNumber {
                 self.trackingNumber = trackingNumber
                 if autoLookup {
@@ -532,8 +568,21 @@ private extension String {
             trackingNumber: PreviewData.deliveredTrackingNumber,
             route: PreviewData.routeDelivered,
             trackingInfo: PreviewData.trackingInfoDelivered,
-            letterSummary: PreviewData.letterDelivered,
+            letterSummary: PreviewData.inboundLetters[1],
             isRecipient: true
+        ))
+    }
+}
+
+#Preview("Inbound Archived Letter Preview") {
+    NavigationStack {
+        TrackingView(viewmodel: .preview(
+            trackingNumber: PreviewData.deliveredTrackingNumber,
+            route: PreviewData.routeDelivered,
+            trackingInfo: PreviewData.trackingInfoDelivered,
+            letterSummary: PreviewData.inboundLetters[1],
+            isRecipient: true,
+            openedInboundShipmentIDs: ["inbound-delivered"]
         ))
     }
 }

@@ -230,6 +230,9 @@ struct CanvasUIView: UIViewRepresentable {
         let container = CanvasContainerView()
         container.install(canvasView: canvasView)
         container.syncCanvasExtent(for: canvasView.drawing)
+        if canvasView.drawing.strokes.isEmpty {
+            container.resetView(animated: false)
+        }
         context.coordinator.containerView = container
         return container
     }
@@ -318,7 +321,6 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
     private let verticalGrowthPadding: CGFloat = 420
     private let verticalGrowthStep: CGFloat = 200
     private var contentDrivenCanvasHeight: CGFloat = 0
-    private var suppressAutoCentering = false
     private var pendingFocusDrawing: PKDrawing?
 
     override init(frame: CGRect) {
@@ -436,10 +438,9 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
     }
 
     private func centerCanvasIfNeeded() {
-        guard !suppressAutoCentering else { return }
-
         let boundsSize = scrollView.bounds.size
         let contentSize = scrollView.contentSize
+        guard contentSize.width > 1, contentSize.height > 1 else { return }
 
         let horizontalInset = max((boundsSize.width - contentSize.width) / 2, 0)
         let verticalInset = max((boundsSize.height - contentSize.height) / 2, 0)
@@ -452,10 +453,10 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
     }
 
     func resetView(animated: Bool) {
-        suppressAutoCentering = false
-        // Animate zoom back to default only (no recentering).
         scrollView.setZoomScale(1, animated: animated)
+        scrollView.contentOffset = .zero
         scrollView.layoutIfNeeded()
+        centerCanvasIfNeeded()
     }
 
     /// Non-safe-area UI chrome that reduces the unobscured drawing area.
@@ -491,7 +492,6 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
         pendingFocusDrawing = nil
 
         layoutIfNeeded()
-        suppressAutoCentering = true
 
         let target = drawing.bounds.insetBy(dx: -48, dy: -48)
         guard target.width > 0, target.height > 0 else { return }
@@ -526,14 +526,17 @@ final class CanvasContainerView: UIView, UIScrollViewDelegate {
             offsetY = target.midY * clampedScale - framing.top - visibleHeight / 2
         }
 
-        scrollView.contentInset = framing
-        scrollView.setZoomScale(clampedScale, animated: false)
+        // Framing is used only to compute zoom/offset — never persisted as contentInset,
+        // which would shrink the drawable area and misalign touch handling.
+        scrollView.setZoomScale(clampedScale, animated: animated)
         scrollView.layoutIfNeeded()
+        centerCanvasIfNeeded()
 
-        let minX = -scrollView.contentInset.left
-        let minY = -scrollView.contentInset.top
-        let maxX = max(scrollView.contentSize.width - scrollView.bounds.width + scrollView.contentInset.right, minX)
-        let maxY = max(scrollView.contentSize.height - scrollView.bounds.height + scrollView.contentInset.bottom, minY)
+        let inset = scrollView.contentInset
+        let minX = -inset.left
+        let minY = -inset.top
+        let maxX = max(scrollView.contentSize.width - scrollView.bounds.width + inset.right, minX)
+        let maxY = max(scrollView.contentSize.height - scrollView.bounds.height + inset.bottom, minY)
         scrollView.contentOffset = CGPoint(
             x: min(max(offsetX, minX), maxX),
             y: min(max(offsetY, minY), maxY)

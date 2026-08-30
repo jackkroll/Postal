@@ -32,47 +32,25 @@ struct SettingsView: View {
                             ? "Unlimited"
                             : "\(entitlements.stampBalance)"
                     )
-                    if !entitlements.unlimitedSends {
-                        LabeledContent(
-                            "Cost",
-                            value: PromoText.stampPricingSummary(entitlements.stampPricing)
-                        )
-                    }
                     LabeledContent(
                         "Mailboxes",
-                        value: "\(entitlements.ownedMailboxes) / \(entitlements.mailboxLimit)"
+                        value: "Claimed \(entitlements.ownedMailboxes) of \(entitlements.mailboxLimit)"
                     )
                     LabeledContent(
                         "Letter size",
                         value: viewmodel.letterSizeSummary
                     )
 
-                    if entitlements.allowance.claimable {
-                        Button {
-                            MonetizationAnalytics.claimTapped(source: .settings)
-                            Task { await viewmodel.claimStampAllowance() }
-                        } label: {
-                            if viewmodel.isClaimingAllowance {
-                                HStack {
-                                    ProgressView()
-                                    Text("Claiming stamps…")
-                                }
-                            } else {
-                                Label(
-                                    PromoText.claimFreeStamps(amount: entitlements.allowance.amount),
-                                    systemImage: "envelope.badge"
-                                )
-                            }
-                        }
-                        .disabled(viewmodel.isClaimingAllowance)
-                    } else if !entitlements.isSubscriber,
-                              let nextClaim = entitlements.allowance.nextClaimAt {
-                        Text(PromoText.nextFreeStampClaim(at: nextClaim))
-                            .font(.footnote)
+                    if !entitlements.allowance.claimable,
+                       !entitlements.isSubscriber,
+                       let nextClaim = entitlements.allowance.nextClaimAt {
+                        Label(PromoText.nextFreeStampClaim(at: nextClaim), systemImage: "clock")
                             .foregroundStyle(.secondary)
                     }
                 }
-
+                
+                stampClaimSection
+                
                 if viewmodel.isSubscriber {
                     Button {
                         isCustomerCenterPresented = true
@@ -86,14 +64,17 @@ struct SettingsView: View {
                         Label(PromoText.upgradeToPlus, systemImage: "star.fill")
                     }
                 }
+                
             } header: {
-                Text("Account")
+                Text("Plan")
             } footer: {
                 Text(viewmodel.accountFooterText)
             }
 
+            
+
             Section {
-                LabeledContent("Status", value: viewmodel.statusTitle)
+                LabeledContent("This device", value: viewmodel.statusTitle)
 
                 if viewmodel.isRegistered {
                     Button(role: .destructive) {
@@ -105,7 +86,7 @@ struct SettingsView: View {
                                 Text("Disabling…")
                             }
                         } else {
-                            Label("Disable Notifications", systemImage: "bell.slash")
+                            Label("Turn Off Notifications", systemImage: "bell.slash")
                         }
                     }
                     .disabled(!viewmodel.canDisableNotifications)
@@ -127,32 +108,41 @@ struct SettingsView: View {
                     }
                     .disabled(!viewmodel.canEnableNotifications)
                 }
-            } header: {
-                Text("Notifications")
-            } footer: {
-                Text(viewmodel.footerText)
-            }
-
-            Section {
-                Picker("Sent letters", selection: $viewmodel.sentMode) {
-                    ForEach(viewmodel.availableSentModes, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
+                DisclosureGroup {
+                    VStack {
+                        Picker("Sent letters", selection: $viewmodel.sentMode) {
+                            ForEach(viewmodel.availableSentModes, id: \.self) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .disabled(viewmodel.isLoadingPreferences || viewmodel.isSavingPreferences)
+                        .padding(.vertical, 4)
+                        
+                        Picker("Inbound letters", selection: $viewmodel.inboundMode) {
+                            ForEach(viewmodel.availableInboundModes, id: \.self) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .disabled(viewmodel.isLoadingPreferences || viewmodel.isSavingPreferences)
+                        .padding(.vertical, 4)
+                        
+                        if viewmodel.showsNotificationUpgradePrompt {
+                            Button {
+                                presentPaywall(source: .notifications)
+                            } label: {
+                                Label(PromoText.unlockShipmentDetails, systemImage: "star.fill")
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
+                    .listRowSeparator(.hidden)
+                } label: {
+                    Text("Notification Preferences")
                 }
-                .disabled(viewmodel.isLoadingPreferences || viewmodel.isSavingPreferences)
-
-                Picker("Inbound letters", selection: $viewmodel.inboundMode) {
-                    ForEach(viewmodel.availableInboundModes, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .disabled(viewmodel.isLoadingPreferences || viewmodel.isSavingPreferences)
-
-                if viewmodel.showsNotificationUpgradePrompt {
-                    Button {
-                        presentPaywall(source: .notifications)
-                    } label: {
-                        Label(PromoText.unlockShipmentDetails, systemImage: "star.fill")
+                if let errorMessage = viewmodel.errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
                     }
                 }
 
@@ -164,9 +154,9 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                Text("Notification Preferences")
+                Text("Notifications")
             } footer: {
-                Text(viewmodel.preferencesFooterText)
+                Text(viewmodel.notificationsFooterText)
             }
             .onChange(of: viewmodel.sentMode) { _, _ in
                 Task { await viewmodel.savePreferencesIfNeeded() }
@@ -178,16 +168,9 @@ struct SettingsView: View {
             Section {
                 Toggle("Show inbound letters", isOn: $showInboundLetters)
             } header: {
-                Text("Letters Display")
+                Text("Letters")
             } footer: {
                 Text("When enabled, an Inbound tab appears on the letters page for mail arriving at your boxes.")
-            }
-
-            if let errorMessage = viewmodel.errorMessage {
-                Section {
-                    Text(errorMessage)
-                        .foregroundStyle(.red)
-                }
             }
 
             #if DEBUG
@@ -226,6 +209,8 @@ struct SettingsView: View {
                     Label("Delete Account", systemImage: "trash")
                 }
                 .disabled(viewmodel.isDeletingAccount)
+            } header: {
+                Text("Account")
             }
         }
         .navigationTitle("Settings")
@@ -258,6 +243,39 @@ struct SettingsView: View {
         MonetizationAnalytics.upgradeTapped(source: source)
         paywallSource = source
         isPaywallPresented = true
+    }
+
+    @ViewBuilder
+    private var stampClaimSection: some View {
+        if let entitlements = viewmodel.entitlements, entitlements.allowance.claimable {
+            Section {
+                Button {
+                    MonetizationAnalytics.claimTapped(source: .settings)
+                    Task { await viewmodel.claimStampAllowance() }
+                } label: {
+                    if viewmodel.isClaimingAllowance {
+                        HStack {
+                            ProgressView()
+                            Text("Claiming stamps…")
+                        }
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        Label(
+                            PromoText.claimFreeStamps(amount: entitlements.allowance.amount),
+                            systemImage: "envelope.fill"
+                        )
+                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(.primary)
+                        .fontWeight(.semibold)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewmodel.isClaimingAllowance)
+            }
+            .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 12, trailing: 20))
+            //.listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
     }
 }
 
@@ -478,6 +496,16 @@ extension SettingsView {
             "\(sentMode.footer) \(inboundMode.footer)"
         }
 
+        var notificationsFooterText: String {
+            if authorizationStatus == .denied {
+                return footerText
+            }
+            if isRegistered {
+                return "\(footerText) \(preferencesFooterText)"
+            }
+            return "\(footerText) Choose what to be notified about once notifications are enabled."
+        }
+
         @MainActor
         func refresh() async {
             await push.refreshAuthorizationStatus()
@@ -677,8 +705,85 @@ extension SettingsView {
     }
 }
 
-#Preview {
+#Preview("Free") {
     NavigationStack {
         SettingsView(viewmodel: .preview(), loadsOnAppear: false)
+    }
+}
+
+#Preview("Free - Allowance Claimed") {
+    NavigationStack {
+        SettingsView(
+            viewmodel: .preview(userEntitlements: .previewFreeAllowanceClaimed),
+            loadsOnAppear: false
+        )
+    }
+}
+
+#Preview("Plus") {
+    NavigationStack {
+        SettingsView(
+            viewmodel: .preview(
+                userEntitlements: .previewPlus,
+                authorizationStatus: .authorized,
+                registeredSummary: .preview,
+                sentMode: .shipmentDetails,
+                inboundMode: .shipmentDetails
+            ),
+            loadsOnAppear: false
+        )
+    }
+}
+
+#Preview("Notifications Denied") {
+    NavigationStack {
+        SettingsView(
+            viewmodel: .preview(authorizationStatus: .denied),
+            loadsOnAppear: false
+        )
+    }
+}
+
+#Preview("Notifications Registered") {
+    NavigationStack {
+        SettingsView(
+            viewmodel: .preview(
+                authorizationStatus: .authorized,
+                registeredSummary: .preview
+            ),
+            loadsOnAppear: false
+        )
+    }
+}
+
+#Preview("Enabling Notifications") {
+    NavigationStack {
+        SettingsView(
+            viewmodel: .preview(
+                authorizationStatus: .authorized,
+                isRegistering: true
+            ),
+            loadsOnAppear: false
+        )
+    }
+}
+
+#Preview("Claiming Stamps") {
+    NavigationStack {
+        SettingsView(
+            viewmodel: .preview(isClaimingAllowance: true),
+            loadsOnAppear: false
+        )
+    }
+}
+
+#Preview("Error") {
+    NavigationStack {
+        SettingsView(
+            viewmodel: .preview(
+                errorMessage: "Could not save notification preferences."
+            ),
+            loadsOnAppear: false
+        )
     }
 }
