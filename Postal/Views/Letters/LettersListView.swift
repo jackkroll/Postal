@@ -117,6 +117,15 @@ struct LettersListView: View {
             viewmodel.refreshInboundArchiveState()
             expandCompletedIfNeededForSearch()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .postalLettersDidChangeRemotely)) { _ in
+            // A block just failed mail in both directions; cached lists are stale.
+            Task {
+                await viewmodel.loadSentLetters()
+                if showInboundLetters {
+                    await viewmodel.loadInboundLetters()
+                }
+            }
+        }
     }
 
     private var tabbedContent: some View {

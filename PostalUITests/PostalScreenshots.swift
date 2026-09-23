@@ -10,6 +10,7 @@ final class PostalScreenshots: XCTestCase {
         for screen in ScreenshotScreen.allCases {
             let app = XCUIApplication()
             setupSnapshot(app)
+            XCUIDevice.shared.appearance = .dark
             app.launchArguments += [
                 "-FASTLANE_SNAPSHOT", "YES",
                 "-ScreenshotScreen", screen.rawValue,

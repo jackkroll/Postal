@@ -28,6 +28,16 @@ extension APIClient {
         )
     }
 
+    /// `GET /api/mailboxes/validate` — whether the address exists and is owned.
+    /// Independent of blocking: a blocked person's address is still valid.
+    func validateMailbox(mailboxID: MailboxID) async throws -> Bool {
+        let response: ValidationResponse = try await get(
+            .validateMailbox(mailboxID: mailboxID.rawValue),
+            authenticated: true
+        )
+        return response.valid
+    }
+
     func listPostOffices(search: String? = nil, limit: Int? = nil) async throws -> [PostOffice] {
         // Mirror shipments clamp so an oversized limit cannot 422 the endpoint.
         let resolvedLimit = max(min(limit ?? 100, 100), 1)
@@ -55,15 +65,12 @@ extension APIClient {
             .validatePostOffice(postOfficeID: postOffice.id),
             authenticated: true
         )
-        async let mailboxResponse: ValidationResponse = get(
-            .validateMailbox(mailboxID: mailboxID.rawValue),
-            authenticated: true
-        )
+        async let isKnownMailbox: Bool = validateMailbox(mailboxID: mailboxID)
 
         guard try await postOfficeResponse.valid else {
             throw MailboxLookupError.invalidPostOfficeID(postOffice.id)
         }
-        guard try await mailboxResponse.valid else {
+        guard try await isKnownMailbox else {
             throw MailboxLookupError.notFound(code: mailboxID.code)
         }
 

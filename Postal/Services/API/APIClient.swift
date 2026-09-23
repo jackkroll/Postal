@@ -20,11 +20,26 @@ enum APIError: LocalizedError {
         }
     }
 
+    var httpStatusCode: Int? {
+        guard case let .httpStatus(code, _, _) = self else { return nil }
+        return code
+    }
+
     /// Parsed when the server returns a 402 with an object `detail`.
     var insufficientStampsDetail: InsufficientStampsDetail? {
         guard case let .httpStatus(402, _, body) = self, let body else { return nil }
         struct Body: Decodable {
             let detail: InsufficientStampsDetail
+        }
+        return try? JSONDecoder().decode(Body.self, from: body).detail
+    }
+
+    /// Parsed when a send is refused because the two users are blocked. A 403 with
+    /// a plain string `detail` (origin ownership, Plus-only estimates) decodes to nil.
+    var sendBlockedDetail: SendBlockedDetail? {
+        guard case let .httpStatus(403, _, body) = self, let body else { return nil }
+        struct Body: Decodable {
+            let detail: SendBlockedDetail
         }
         return try? JSONDecoder().decode(Body.self, from: body).detail
     }

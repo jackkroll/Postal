@@ -191,7 +191,11 @@ extension ComposeView {
                 createdTrackingNumber = response.trackingNumber
                 showSuccess = true
             } catch {
-                errorMessage = error.localizedDescription
+                if let denial = (error as? APIError)?.sendBlockedDetail {
+                    errorMessage = BlockText.sendDenied(denial.reason)
+                } else {
+                    errorMessage = error.localizedDescription
+                }
             }
         }
 

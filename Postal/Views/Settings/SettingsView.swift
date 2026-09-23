@@ -173,6 +173,24 @@ struct SettingsView: View {
                 Text("When enabled, an Inbound tab appears on the letters page for mail arriving at your boxes.")
             }
 
+            Section {
+                NavigationLink {
+                    BlockedAddressesView(viewmodel: .init(api: viewmodel.api))
+                } label: {
+                    Label(BlockText.screenTitle, systemImage: "hand.raised")
+                }
+
+                NavigationLink {
+                    FiledReportsView(viewmodel: .init())
+                } label: {
+                    Label(ReportText.screenTitle, systemImage: "flag")
+                }
+            } header: {
+                Text(BlockText.settingsSection)
+            } footer: {
+                Text(ReportText.settingsFooter)
+            }
+
             #if DEBUG
             Section {
                 Button {

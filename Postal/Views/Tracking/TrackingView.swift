@@ -106,6 +106,10 @@ struct TrackingView: View {
                 if !viewmodel.isRecipient, let letterLink = viewmodel.letterReadingLink {
                     viewLetterSection(letterLink, prominent: false)
                 }
+
+                if viewmodel.showsModerationSection {
+                    moderationSection
+                }
             }
             .scrollContentBackground(.hidden)
             .refreshable {
@@ -125,6 +129,7 @@ struct TrackingView: View {
             .task {
                 MapKitWarmup.prepareIfNeeded()
                 viewmodel.recordInboundOpenIfNeeded()
+                await viewmodel.loadModerationStateIfNeeded()
             }
             .toolbar {
                 Button {
@@ -139,6 +144,42 @@ struct TrackingView: View {
             } message: {
                 Text("Tracking link copied to clipboard.")
             }
+            .moderationFlow(viewmodel.moderation)
+        }
+    }
+
+    /// Both actions, side by side, because they do different things: only the
+    /// recipient of an arrived letter can report one, while either party can block
+    /// the other. Picking one still offers the other inside the flow.
+    @ViewBuilder
+    private var moderationSection: some View {
+        Section {
+            if let target = viewmodel.letterReportTarget {
+                Button {
+                    viewmodel.presentLetterReport(target)
+                } label: {
+                    Label(
+                        viewmodel.hasReportedLetter ? ReportText.badge : ReportText.action,
+                        systemImage: viewmodel.hasReportedLetter ? "flag.fill" : "flag"
+                    )
+                }
+            }
+
+            if let mailbox = viewmodel.blockTarget {
+                if viewmodel.hasBlockedCounterpart {
+                    // Lifting a block lives in Settings, so this row only reports state.
+                    Label(BlockText.badge, systemImage: "hand.raised.fill")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button(role: .destructive) {
+                        viewmodel.presentBlock(mailbox)
+                    } label: {
+                        Label(BlockText.confirmAction, systemImage: "hand.raised")
+                    }
+                }
+            }
+        } footer: {
+            Text(viewmodel.moderationFooter)
         }
     }
 
@@ -340,6 +381,9 @@ extension TrackingView {
     class ViewModel {
         let api: APIClient
         let letterService: LetterContentProviding
+        let reports: ReportService
+        let blocks: BlockService
+        let moderation: ModerationFlow
         var trackingNumber: String
         var letterSummary: LetterSummary?
         var isRecipient: Bool
@@ -376,6 +420,69 @@ extension TrackingView {
 
         var showsInboundLetterNavigation: Bool {
             isRecipient && !showsInboundLetterPreviewOnAppear && letterReadingLink != nil
+        }
+
+        /// Non-nil only when this user may actually file a letter report: they are the
+        /// recipient, and the letter has arrived so there is content they have seen.
+        /// The server enforces both, but offering an action that always 400s is worse
+        /// than not offering it.
+        var letterReportTarget: ReportTarget? {
+            guard isRecipient, !isSelfAddressed,
+                  let letterSummary, letterSummary.canReadLetter
+            else {
+                return nil
+            }
+            let sender = letterSummary.origin.mailboxID
+            return .letter(
+                shipmentID: letterSummary.shipmentID,
+                sender: sender,
+                senderLabel: sender == nil ? letterSummary.origin.unresolvedLabel : nil
+            )
+        }
+
+        var hasReportedLetter: Bool {
+            guard let shipmentID = letterReportTarget?.shipmentID else { return false }
+            return reports.report(forLetter: shipmentID) != nil
+        }
+
+        /// The other party on this letter — the sender when it arrived here, the
+        /// recipient when this user sent it. A block cuts both directions, so either
+        /// side can place one, and it needs no delivered letter behind it.
+        var blockTarget: MailboxSummary? {
+            guard let letterSummary, !isSelfAddressed else { return nil }
+            let counterpart = isRecipient ? letterSummary.origin : letterSummary.destination
+            return counterpart.mailboxID.map { MailboxSummary.unresolved($0) }
+        }
+
+        var hasBlockedCounterpart: Bool {
+            guard let mailbox = blockTarget else { return false }
+            return blocks.isBlocked(mailbox.id)
+        }
+
+        var showsModerationSection: Bool {
+            letterReportTarget != nil || blockTarget != nil
+        }
+
+        /// Spells out the difference when both are offered, since a report changing
+        /// nothing about mail flow is the part people get wrong.
+        var moderationFooter: String {
+            switch (letterReportTarget != nil, blockTarget != nil) {
+            case (true, true): ReportText.letterActionsFooter
+            case (true, false): ReportText.independenceNote
+            default: BlockText.confirmScope
+            }
+        }
+
+        /// A self-addressed time capsule has the same box at both ends, so there is
+        /// nobody else to report or block.
+        private var isSelfAddressed: Bool {
+            guard let letterSummary,
+                  let origin = letterSummary.origin.mailboxID,
+                  let destination = letterSummary.destination.mailboxID
+            else {
+                return false
+            }
+            return origin == destination
         }
 
         /// Prefer live public-track ETA; fall back to shipment-backed letter summary.
@@ -428,6 +535,8 @@ extension TrackingView {
             letterSummary: LetterSummary? = nil,
             isRecipient: Bool = false,
             inboundOpenStore: InboundLetterOpenStoring = AppServices.inboundLetterOpens,
+            reports: ReportService = AppServices.reports,
+            blocks: BlockService = AppServices.blocks,
             autoLookup: Bool = true
         ) {
             self.api = apiClient
@@ -435,6 +544,9 @@ extension TrackingView {
             self.letterSummary = letterSummary
             self.isRecipient = isRecipient
             self.inboundOpenStore = inboundOpenStore
+            self.reports = reports
+            self.blocks = blocks
+            moderation = ModerationFlow(reports: reports, blocks: blocks)
             if isRecipient, let letterSummary {
                 showsInboundLetterPreviewOnAppear = InboundLetterOpenStore.isArchived(
                     letterSummary,
@@ -456,6 +568,27 @@ extension TrackingView {
         func recordInboundOpenIfNeeded() {
             guard isRecipient, let shipmentID, !shipmentID.isEmpty else { return }
             inboundOpenStore.markOpened(shipmentID)
+        }
+
+        @MainActor
+        func presentLetterReport(_ target: ReportTarget) {
+            moderation.beginReport(target)
+        }
+
+        @MainActor
+        func presentBlock(_ mailbox: MailboxSummary) {
+            moderation.beginBlock(mailbox)
+        }
+
+        /// Feeds the "already reported" state and the block offer that follows a report.
+        /// Neither action depends on this having landed — the server is still the
+        /// authority — so failures are left to the shared services.
+        @MainActor
+        func loadModerationStateIfNeeded() async {
+            guard showsModerationSection else { return }
+            async let reportsFetch: Void = reports.hasLoaded ? () : reports.load()
+            async let blocksFetch: Void = blocks.hasLoaded ? () : blocks.load()
+            _ = await (reportsFetch, blocksFetch)
         }
 
         func pushRouteMap() {
@@ -570,6 +703,19 @@ private extension String {
             trackingInfo: PreviewData.trackingInfoDelivered,
             letterSummary: PreviewData.inboundLetters[1],
             isRecipient: true
+        ))
+    }
+}
+
+#Preview("Inbound Already Reported") {
+    NavigationStack {
+        TrackingView(viewmodel: .preview(
+            trackingNumber: PreviewData.deliveredTrackingNumber,
+            route: PreviewData.routeDelivered,
+            trackingInfo: PreviewData.trackingInfoDelivered,
+            letterSummary: PreviewData.inboundLetters[1],
+            isRecipient: true,
+            reports: PreviewData.filedReports
         ))
     }
 }

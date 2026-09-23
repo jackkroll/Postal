@@ -138,6 +138,7 @@ extension TrackingView.ViewModel {
         letterSummary: LetterSummary? = nil,
         isRecipient: Bool = false,
         openedInboundShipmentIDs: Set<String> = [],
+        reports: [SubmittedReport] = [],
         errorMessage: String? = nil,
         isLoading: Bool = false
     ) -> TrackingView.ViewModel {
@@ -147,6 +148,8 @@ extension TrackingView.ViewModel {
             letterSummary: letterSummary,
             isRecipient: isRecipient,
             inboundOpenStore: PreviewInboundLetterOpenStore(openedIDs: openedInboundShipmentIDs),
+            reports: .preview(reports: reports),
+            blocks: .preview(),
             autoLookup: false
         )
         viewModel.trackingNumber = trackingNumber
@@ -301,14 +304,80 @@ extension SettingsView.ViewModel {
 extension AddressBook.ViewModel {
     static func preview(
         addresses: [AddressBookEntrySummary] = PreviewData.addressBookEntries,
-        ownedMailboxes: [MailboxSummary] = PreviewData.ownedMailboxes
+        ownedMailboxes: [MailboxSummary] = PreviewData.ownedMailboxes,
+        blocks: [BlockedAddress] = PreviewData.blockedAddresses,
+        reports: [SubmittedReport] = PreviewData.filedReports
     ) -> AddressBook.ViewModel {
-        let viewModel = AddressBook.ViewModel(api: APIClient())
+        let viewModel = AddressBook.ViewModel(
+            api: APIClient(),
+            blocks: .preview(blocks: blocks),
+            reports: .preview(reports: reports)
+        )
         viewModel.addresses = addresses
         viewModel.ownedMailboxes = ownedMailboxes
         viewModel.hasLoadedOwned = true
         viewModel.hasLoadedAddresses = true
         return viewModel
+    }
+}
+
+extension BlockService {
+    static func preview(blocks: [BlockedAddress] = PreviewData.blockedAddresses) -> BlockService {
+        let service = BlockService(
+            api: APIClient(),
+            entitlements: PreviewEntitlementsService()
+        )
+        service.replaceAll(blocks)
+        return service
+    }
+}
+
+extension BlockedAddressesView.ViewModel {
+    static func preview(
+        blocks: [BlockedAddress] = PreviewData.blockedAddresses,
+        ownedMailboxes: [MailboxSummary] = PreviewData.ownedMailboxes
+    ) -> BlockedAddressesView.ViewModel {
+        let viewModel = BlockedAddressesView.ViewModel(
+            api: APIClient(),
+            blocks: .preview(blocks: blocks),
+            reports: .preview()
+        )
+        viewModel.ownedMailboxes = ownedMailboxes
+        return viewModel
+    }
+}
+
+extension ReportService {
+    static func preview(reports: [SubmittedReport] = PreviewData.filedReports) -> ReportService {
+        let service = ReportService(api: APIClient())
+        service.replaceAll(reports)
+        return service
+    }
+}
+
+extension FiledReportsView.ViewModel {
+    static func preview(
+        reports: [SubmittedReport] = PreviewData.filedReports
+    ) -> FiledReportsView.ViewModel {
+        FiledReportsView.ViewModel(reports: .preview(reports: reports))
+    }
+}
+
+extension ModerationFlow {
+    /// Opens straight onto `page`, so each step of the report/block flow can be
+    /// previewed without submitting anything.
+    static func preview(
+        _ page: Page,
+        errorMessage: String? = nil,
+        reports: [SubmittedReport] = PreviewData.filedReports,
+        blocks: [BlockedAddress] = PreviewData.blockedAddresses
+    ) -> ModerationFlow {
+        let flow = ModerationFlow(
+            reports: .preview(reports: reports),
+            blocks: .preview(blocks: blocks)
+        )
+        flow.showForPreview(page, errorMessage: errorMessage)
+        return flow
     }
 }
 

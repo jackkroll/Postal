@@ -16,5 +16,7 @@ enum AppServices {
         return client
     }()
     static let entitlements: EntitlementsService = EntitlementsService(api: api)
+    static let blocks: BlockService = BlockService(api: api)
+    static let reports: ReportService = ReportService(api: api)
     static let purchasesIdentity = PurchasesIdentityService()
 }

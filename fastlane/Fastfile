@@ -28,7 +28,8 @@ platform :ios do
       configuration: "Release",
       output_directory: SCREENSHOTS_DIR,
       clear_previous_screenshots: true,
-      stop_after_first_error: true
+      stop_after_first_error: true,
+      dark_mode: true
     )
     restore_frameit_assets
   end

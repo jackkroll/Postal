@@ -83,6 +83,9 @@ struct SignInView: View {
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
                     .disabled(viewmodel.isLoading)
+                    
+                    Text("By continuing, you agree with the [Terms of Service](https://jackk.dev/projects/postal/terms/)")
+                        .font(.caption)
                 }
                 .padding(.top, 28)
                 .padding(.bottom, 12)

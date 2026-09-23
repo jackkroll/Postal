@@ -124,6 +124,8 @@ struct RootView: View {
         _ = await AppServices.purchasesIdentity.sync(firebaseUserID: nil)
         guard !Task.isCancelled else { return }
         AppServices.entitlements.clear()
+        AppServices.blocks.clear()
+        AppServices.reports.clear()
     }
 
     /// Re-register the device token with the server after sign-in when permission

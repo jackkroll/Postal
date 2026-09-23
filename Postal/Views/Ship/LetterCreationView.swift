@@ -182,6 +182,25 @@ struct LetterCreationView: View {
                 Button("OK", role: .cancel) {
                     viewmodel.retryStampPhase()
                 }
+            } else if viewmodel.sendBlockedReason == .senderBlockedRecipient {
+                if viewmodel.removableBlock != nil {
+                    Button(BlockText.unblockAction) {
+                        Task { await viewmodel.unblockDestination() }
+                    }
+                } else {
+                    // Blocked through another of their mailboxes: no id to lift here.
+                    Button(BlockText.manageBlockedAction) {
+                        viewmodel.presentBlockedAddresses()
+                    }
+                }
+                Button("OK", role: .cancel) {
+                    viewmodel.dismissSendBlock()
+                }
+            } else if viewmodel.sendBlockedReason == .recipientBlockedSender {
+                // Nothing to retry, and nothing that hints at a block.
+                Button("OK", role: .cancel) {
+                    viewmodel.dismissSendBlock()
+                }
             } else {
                 Button("OK", role: .cancel) {
                     viewmodel.retryStampPhase()
@@ -189,6 +208,14 @@ struct LetterCreationView: View {
             }
         } message: {
             Text(viewmodel.sendErrorMessage ?? "")
+        }
+        .sheet(isPresented: $viewmodel.isBlockedAddressesPresented) {
+            NavigationStack {
+                BlockedAddressesView(
+                    viewmodel: .init(api: viewmodel.api, blocks: viewmodel.blocks),
+                    presentedModally: true
+                )
+            }
         }
         .alert("Couldn't Load Mailboxes", isPresented: Binding(
             get: { viewmodel.shouldPresentMailboxLoadAlert },
@@ -770,6 +797,7 @@ extension LetterCreationView {
         let api: APIClient
         let drafts: DraftLetterStoring
         let entitlementsService: EntitlementsProviding
+        let blocks: BlockService
         let draftID: UUID
 
         var phase: LetterCreationPhase = .overview
@@ -802,6 +830,13 @@ extension LetterCreationView {
         var isClaimingAllowance = false
         var sendErrorMessage: String?
         var needsStamps = false
+        /// Set when the server refused the send because of a block, which decides
+        /// whether the failure alert can offer to lift it.
+        var sendBlockedReason: SendBlockedDetail.Reason?
+        /// The block behind a `sender_blocked_recipient` refusal, when it is the
+        /// destination address itself that was blocked.
+        var removableBlock: BlockedAddress?
+        var isBlockedAddressesPresented = false
         var createdTrackingNumber: String?
         /// Snapshot passed into tracking after a successful send.
         var sentLetterSummary: LetterSummary?
@@ -832,6 +867,7 @@ extension LetterCreationView {
             api: APIClient,
             drafts: DraftLetterStoring = AppServices.letterDrafts,
             entitlementsService: EntitlementsProviding = AppServices.entitlements,
+            blocks: BlockService = AppServices.blocks,
             origin: MailboxSummary? = nil,
             destination: MailboxSummary? = nil,
             draftID: UUID? = nil
@@ -839,6 +875,7 @@ extension LetterCreationView {
             self.api = api
             self.drafts = drafts
             self.entitlementsService = entitlementsService
+            self.blocks = blocks
             if let draftID, let draft = drafts.load(id: draftID) {
                 self.draftID = draft.id
                 isResumingDraft = true
@@ -1642,6 +1679,11 @@ extension LetterCreationView {
                 }
             } catch {
                 routeEstimate = nil
+                // The estimate also 403s for non-Plus callers, which is expected and
+                // stays silent; a block is worth surfacing before they spend a stamp.
+                if let denial = (error as? APIError)?.sendBlockedDetail {
+                    routeEstimateError = BlockText.sendDenied(denial.reason)
+                }
             }
         }
 
@@ -1811,7 +1853,10 @@ extension LetterCreationView {
                 await entitlementsService.refresh()
                 phase = .sent
             } catch {
-                if let apiError = error as? APIError,
+                if let denial = (error as? APIError)?.sendBlockedDetail {
+                    needsStamps = false
+                    await applySendBlocked(denial)
+                } else if let apiError = error as? APIError,
                    case let .httpStatus(code, message, _) = apiError,
                    code == 402 {
                     needsStamps = true
@@ -1841,8 +1886,58 @@ extension LetterCreationView {
                     envelopeVisible = true
                     letterPlacement = .tucked
                 }
-                presentSendConfirmation()
+                // A blocked send has nothing to retry until the block is gone, so
+                // don't reopen postage underneath the alert.
+                if sendBlockedReason == nil {
+                    presentSendConfirmation()
+                }
             }
+        }
+
+        /// Splits the two denial codes: the user's own block is actionable, the
+        /// other party's is reported neutrally and never named as a block.
+        @MainActor
+        private func applySendBlocked(_ denial: SendBlockedDetail) async {
+            sendBlockedReason = denial.reason
+            sendErrorMessage = BlockText.sendDenied(denial.reason)
+            removableBlock = nil
+
+            guard denial.reason == .senderBlockedRecipient,
+                  let destination = selectedDestinationMailbox
+            else { return }
+
+            // No match when the person was blocked via another of their mailboxes;
+            // the alert then points at the full blocked list instead.
+            await blocks.load()
+            removableBlock = blocks.block(for: destination.id)
+        }
+
+        @MainActor
+        func unblockDestination() async {
+            guard let block = removableBlock else { return }
+
+            do {
+                try await blocks.unblock(id: block.id)
+                removableBlock = nil
+                dismissSendBlock()
+                presentSendConfirmation()
+            } catch {
+                guard !error.isPostalCancellation else { return }
+                sendErrorMessage = BlockService.unblockFailureMessage(error)
+            }
+        }
+
+        @MainActor
+        func presentBlockedAddresses() {
+            dismissSendBlock()
+            isBlockedAddressesPresented = true
+        }
+
+        @MainActor
+        func dismissSendBlock() {
+            sendErrorMessage = nil
+            sendBlockedReason = nil
+            removableBlock = nil
         }
 
         private func letterSummary(

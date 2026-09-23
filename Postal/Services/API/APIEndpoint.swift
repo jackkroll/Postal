@@ -37,6 +37,11 @@ enum APIEndpoint {
     case addressEntry(id: String)
     case updateAddressEntry(id: String)
     case deleteAddressEntry(id: String)
+    case meBlocks
+    case createBlock
+    case deleteBlock(id: String)
+    case meReports
+    case createReport
 
     var path: String {
         switch self {
@@ -98,16 +103,22 @@ enum APIEndpoint {
             return "/api/me/addressbook"
         case let .addressEntry(id), let .updateAddressEntry(id), let .deleteAddressEntry(id):
             return "/api/me/addressbook/\(id)"
+        case .meBlocks, .createBlock:
+            return "/api/me/blocks"
+        case let .deleteBlock(id):
+            return "/api/me/blocks/\(id)"
+        case .meReports, .createReport:
+            return "/api/me/reports"
         }
     }
 
     var method: String {
         switch self {
-        case .createShipment, .claimMailbox, .registerDeviceToken, .addAddressToBook, .claimStampAllowance, .refreshEntitlements:
+        case .createShipment, .claimMailbox, .registerDeviceToken, .addAddressToBook, .claimStampAllowance, .refreshEntitlements, .createBlock, .createReport:
             return "POST"
         case .updateNotificationPreferences, .updateAddressEntry:
             return "PUT"
-        case .unregisterDeviceToken, .deleteMyAccount, .deleteAddressEntry, .deleteMailbox:
+        case .unregisterDeviceToken, .deleteMyAccount, .deleteAddressEntry, .deleteMailbox, .deleteBlock:
             return "DELETE"
         case .shipmentLetter:
             return "GET"

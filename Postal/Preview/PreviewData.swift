@@ -227,6 +227,71 @@ enum PreviewData {
         ),
     ]
 
+    // MARK: - Blocks
+
+    static let blockedAddresses: [BlockedAddress] = [
+        BlockedAddress(
+            id: "block-1",
+            mailboxID: destinationMailboxes[4].id.rawValue,
+            postOfficeID: destinationMailboxes[4].postOfficeID,
+            postOfficeName: destinationMailboxes[4].postOfficeName,
+            mailboxLabel: destinationMailboxes[4].label,
+            createdAt: daysAgo(21),
+            cancelledLetters: nil
+        ),
+        // Blocked mailbox since released: the block stands, the details go null.
+        BlockedAddress(
+            id: "block-2",
+            mailboxID: destinationMailboxes[1].id.rawValue,
+            postOfficeID: nil,
+            postOfficeName: nil,
+            mailboxLabel: nil,
+            createdAt: daysAgo(3),
+            cancelledLetters: nil
+        ),
+    ]
+
+    // MARK: - Reports
+
+    /// The sender matches `inboundLetters[1]`, the delivered inbound letter.
+    static let letterReportTarget = ReportTarget.letter(
+        shipmentID: "inbound-delivered",
+        sender: destinationMailboxes[3].id,
+        senderLabel: destinationMailboxes[3].label
+    )
+
+    static let filedReports: [SubmittedReport] = [
+        SubmittedReport(
+            id: "report-1",
+            targetType: .letter,
+            letterID: "inbound-delivered",
+            mailboxID: destinationMailboxes[3].id.rawValue,
+            reason: .harassment,
+            details: "Threatening language.",
+            createdAt: daysAgo(2)
+        ),
+        // A mailbox report with no details, which is the common shape.
+        SubmittedReport(
+            id: "report-2",
+            targetType: .mailbox,
+            letterID: nil,
+            mailboxID: destinationMailboxes[4].id.rawValue,
+            reason: .spam,
+            details: nil,
+            createdAt: daysAgo(11)
+        ),
+        // Predates origin-box tracking, so there is no sender address to show or block.
+        SubmittedReport(
+            id: "report-3",
+            targetType: .letter,
+            letterID: "inbound-legacy",
+            mailboxID: nil,
+            reason: .other,
+            details: "Not sure how to categorize this one.",
+            createdAt: daysAgo(30)
+        ),
+    ]
+
     // MARK: - Tracking Numbers
 
     static let inTransitTrackingNumber = "f47ac10b-58cc-4372-a567-0e02b2c3d479"

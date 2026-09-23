@@ -144,6 +144,33 @@ struct AddressBook: View {
         } message: {
             Text(viewmodel.inviteScanError ?? "")
         }
+        .moderationFlow(viewmodel.moderation)
+        .alert(
+            "Couldn’t Unblock",
+            isPresented: Binding(
+                get: { viewmodel.blockAlertMessage != nil },
+                set: { if !$0 { viewmodel.blockAlertMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { viewmodel.blockAlertMessage = nil }
+        } message: {
+            Text(viewmodel.blockAlertMessage ?? "")
+        }
+        .alert(
+            BlockText.unblockTitle,
+            isPresented: Binding(
+                get: { viewmodel.unblockCandidate != nil },
+                set: { if !$0 { viewmodel.unblockCandidate = nil } }
+            ),
+            presenting: viewmodel.unblockCandidate
+        ) { candidate in
+            Button("Cancel", role: .cancel) { viewmodel.unblockCandidate = nil }
+            Button(BlockText.unblockAction, role: .destructive) {
+                Task { await viewmodel.unblock(candidate) }
+            }
+        } message: { _ in
+            Text(BlockText.unblockBody)
+        }
         .task {
             guard loadsOnAppear else { return }
             await viewmodel.refresh()
@@ -294,12 +321,23 @@ struct SavedAddressesSection: View {
                 SavedAddressesRows(
                     addresses: viewmodel.addresses,
                     allowsDelete: allowsDelete,
+                    blockedEntryIDs: viewmodel.blockedEntryIDs,
+                    reportedEntryIDs: viewmodel.reportedEntryIDs,
                     onSelect: onSelect,
                     onEdit: { address in
                         viewmodel.editor = .edit(address)
                     },
                     onDelete: { offsets in
                         viewmodel.deleteAddresses(at: offsets)
+                    },
+                    onBlock: { address in
+                        viewmodel.presentBlock(for: address)
+                    },
+                    onUnblock: { address in
+                        viewmodel.presentUnblock(for: address)
+                    },
+                    onReport: { address in
+                        viewmodel.presentReport(for: address)
                     }
                 )
             }
@@ -309,7 +347,7 @@ struct SavedAddressesSection: View {
             if viewmodel.addresses.isEmpty {
                 EmptyView()
             } else {
-                Text("Swipe left to delete, or right to edit.")
+                Text("Swipe left to delete, or right to edit, block, and report.")
             }
         }
     }
@@ -335,21 +373,58 @@ struct SavedAddressesEmptyContent: View {
 struct SavedAddressesRows: View {
     let addresses: [AddressBookEntrySummary]
     var allowsDelete: Bool
+    var blockedEntryIDs: Set<String> = []
+    var reportedEntryIDs: Set<String> = []
     var onSelect: ((AddressBookEntrySummary) -> Void)?
     var onEdit: (AddressBookEntrySummary) -> Void
     var onDelete: (IndexSet) -> Void
+    var onBlock: ((AddressBookEntrySummary) -> Void)?
+    var onUnblock: ((AddressBookEntrySummary) -> Void)?
+    var onReport: ((AddressBookEntrySummary) -> Void)?
 
     var body: some View {
         ForEach(addresses) { address in
-            SavedAddressRow(address: address, onSelect: onSelect)
-                .swipeActions(edge: .leading) {
-                    Button {
-                        onEdit(address)
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    .tint(.blue)
+            let isBlocked = blockedEntryIDs.contains(address.id)
+            SavedAddressRow(
+                address: address,
+                isBlocked: isBlocked,
+                isReported: reportedEntryIDs.contains(address.id),
+                onSelect: onSelect
+            )
+            .swipeActions(edge: .leading) {
+                Button {
+                    onEdit(address)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
                 }
+                .tint(.blue)
+
+                if isBlocked, let onUnblock {
+                    Button {
+                        onUnblock(address)
+                    } label: {
+                        Label(BlockText.unblockAction, systemImage: "hand.raised.slash")
+                    }
+                    .tint(.indigo)
+                } else if !isBlocked, let onBlock {
+                    Button(role: .destructive) {
+                        onBlock(address)
+                    } label: {
+                        Label(BlockText.confirmAction, systemImage: "hand.raised")
+                    }
+                }
+
+                // Offered next to the block rather than instead of it: a report is a
+                // moderation claim, a block is what stops the mail.
+                if let onReport {
+                    Button {
+                        onReport(address)
+                    } label: {
+                        Label(ReportText.action, systemImage: "flag")
+                    }
+                    .tint(.orange)
+                }
+            }
         }
         .onDelete(perform: allowsDelete ? onDelete : { _ in })
     }
@@ -357,6 +432,8 @@ struct SavedAddressesRows: View {
 
 struct SavedAddressRow: View {
     let address: AddressBookEntrySummary
+    var isBlocked: Bool = false
+    var isReported: Bool = false
     var onSelect: ((AddressBookEntrySummary) -> Void)? = nil
 
     var body: some View {
@@ -365,15 +442,19 @@ struct SavedAddressRow: View {
                 Button {
                     onSelect(address)
                 } label: {
-                    AddressBookRowView(address: address)
+                    row
                 }
                 .foregroundStyle(.primary)
             } else {
                 NavigationLink(value: ViewRoute.ship(destination: address.mailboxSummary)) {
-                    AddressBookRowView(address: address)
+                    row
                 }
             }
         }
+    }
+
+    private var row: some View {
+        AddressBookRowView(address: address, isBlocked: isBlocked, isReported: isReported)
     }
 }
 
@@ -638,11 +719,22 @@ struct OwnedMailboxRowView: View {
 
 struct AddressBookRowView: View {
     let address: AddressBookEntrySummary
+    var isBlocked: Bool = false
+    var isReported: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(address.nickname)
-                .font(.body.weight(.semibold))
+            HStack(spacing: 6) {
+                Text(address.nickname)
+                    .font(.body.weight(.semibold))
+                // Both can be true: blocking and reporting are independent.
+                if isBlocked {
+                    ModerationBadge(BlockText.badge)
+                }
+                if isReported {
+                    ModerationBadge(ReportText.badge)
+                }
+            }
             HStack(spacing: 6) {
                 Text(address.mailboxSummary.locationLabel)
                 Text(address.mailboxID.code)
@@ -666,8 +758,15 @@ extension AddressBook {
     class ViewModel {
         let api: APIClient
         let entitlementsService: EntitlementsProviding
+        let blocks: BlockService
+        let reports: ReportService
+        let moderation: ModerationFlow
         var addresses: [AddressBookEntrySummary]
-        var ownedMailboxes: [MailboxSummary]
+        /// Kept in sync with the flow so blocking or reporting yourself is caught
+        /// before a round trip.
+        var ownedMailboxes: [MailboxSummary] {
+            didSet { moderation.ownedMailboxIDs = Set(ownedMailboxes.map(\.id)) }
+        }
         var isLoadingOwned = false
         var hasLoadedOwned = false
         var hasLoadedAddresses = false
@@ -681,15 +780,70 @@ extension AddressBook {
         var isInviteScannerPresented = false
         var scannedInviteMailboxID: MailboxID?
         var inviteScanError: String?
+        var unblockCandidate: BlockedAddress?
+        /// Unblocking is the one moderation action that isn't in the shared sheet, so
+        /// its failures still need somewhere to land.
+        var blockAlertMessage: String?
 
         init(
             api: APIClient,
-            entitlementsService: EntitlementsProviding = AppServices.entitlements
+            entitlementsService: EntitlementsProviding = AppServices.entitlements,
+            blocks: BlockService = AppServices.blocks,
+            reports: ReportService = AppServices.reports
         ) {
             self.api = api
             self.entitlementsService = entitlementsService
+            self.blocks = blocks
+            self.reports = reports
+            moderation = ModerationFlow(reports: reports, blocks: blocks)
             self.addresses = []
             self.ownedMailboxes = []
+        }
+
+        /// Entries whose exact address is blocked. A person blocked through another
+        /// of their mailboxes is not detectable here, so absence proves nothing.
+        var blockedEntryIDs: Set<String> {
+            guard !blocks.blocks.isEmpty else { return [] }
+            return Set(
+                addresses
+                    .filter { blocks.isBlocked($0.mailboxID) }
+                    .map(\.id)
+            )
+        }
+
+        /// Entries reported as a mailbox. Carries the same caveat as `blockedEntryIDs`.
+        var reportedEntryIDs: Set<String> {
+            guard !reports.reports.isEmpty else { return [] }
+            return Set(
+                addresses
+                    .filter { reports.report(forMailbox: $0.mailboxID) != nil }
+                    .map(\.id)
+            )
+        }
+
+        @MainActor
+        func presentBlock(for entry: AddressBookEntrySummary) {
+            moderation.beginBlock(entry.mailboxSummary)
+        }
+
+        @MainActor
+        func presentReport(for entry: AddressBookEntrySummary) {
+            moderation.beginReport(.mailbox(entry.mailboxSummary))
+        }
+
+        func presentUnblock(for entry: AddressBookEntrySummary) {
+            unblockCandidate = blocks.block(for: entry.mailboxID)
+        }
+
+        @MainActor
+        func unblock(_ block: BlockedAddress) async {
+            unblockCandidate = nil
+            do {
+                try await blocks.unblock(id: block.id)
+            } catch {
+                guard !error.isPostalCancellation else { return }
+                blockAlertMessage = BlockService.unblockFailureMessage(error)
+            }
         }
 
         var canClaimMailbox: Bool {
@@ -709,7 +863,9 @@ extension AddressBook {
             async let entitlementsFetch: Void = entitlementsService.refresh()
             async let addressesFetch: Void = fetchAddresses()
             async let ownedFetch: Void = fetchOwnedMailboxes()
-            _ = await (entitlementsFetch, addressesFetch, ownedFetch)
+            async let blocksFetch: Void = blocks.load()
+            async let reportsFetch: Void = reports.load()
+            _ = await (entitlementsFetch, addressesFetch, ownedFetch, blocksFetch, reportsFetch)
         }
 
         func refreshAfterPurchase() async {
